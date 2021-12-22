@@ -51,6 +51,8 @@ protected:
 
     void update(float time) override;
 
+    void renderUI(VkCommandBuffer commandBuffer);
+
     void updateBodies(float time);
 
     void resolveContact(Contact& contact);
@@ -86,4 +88,5 @@ protected:
     SkyBox skyBox;
     Entity sphereEntity;
     const glm::vec3 GRAVITY{0, -10, 0};
+    std::vector<Body*> bodies;
 };

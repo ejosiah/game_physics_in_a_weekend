@@ -12,6 +12,7 @@ struct Body{
     glm::vec3 angularVelocity{0};
     float invMass{0};
     float elasticity{1};
+    float friction{0.5};
     std::shared_ptr<Shape> shape;
 
     [[nodiscard]]

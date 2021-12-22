@@ -1,4 +1,5 @@
 #include "body.hpp"
+#include "utility.hpp"
 
 glm::vec3 Body::centerOfMassWorldSpace() const {
     auto centerOfMass = shape->centerOfMass();
@@ -73,19 +74,22 @@ void Body::applyImpulse(const glm::vec3& impulsePoint, const glm::vec3 &impulse)
 void Body::update(float dt) {
     position += linearVelocity * dt;
 
-//    auto com = centerOfMassWorldSpace();
-//    auto comToPosition = position - com;
-//
-//    auto orient = glm::mat3(orientation);
-//    auto tensor = orient * shape->inertiaTensor() * glm::transpose(orient);
-//
-//    auto alpha = glm::inverse(tensor) * glm::cross(angularVelocity, tensor * angularVelocity);
-//    angularVelocity += alpha;
-//
-//    auto dAngle = angularVelocity * dt;
-//    glm::quat dq = glm::angleAxis(glm::length(dAngle), glm::normalize(dAngle));
-//    orientation = dq * orientation;
-//    orientation = glm::normalize(orientation);
-//
-//    position = com + glm::mat3(orientation) * comToPosition;
+    auto com = centerOfMassWorldSpace();
+    auto comToPosition = position - com;
+
+    auto orient = glm::mat3(orientation);
+    auto tensor = orient * shape->inertiaTensor() * glm::transpose(orient);
+
+    auto alpha = glm::inverse(tensor) * glm::cross(angularVelocity, tensor * angularVelocity);
+    angularVelocity += alpha;
+
+    auto dAngle = angularVelocity * dt;
+    glm::quat dq = glm::angleAxis(glm::length(dAngle), glm::normalize(dAngle));
+    if(glm::any(glm::isnan(dq))){
+        dq = {1, 0, 0, 0};
+    }
+    orientation = dq * orientation;
+    orientation = glm::normalize(orientation);
+
+    position = com + glm::mat3(orientation) * comToPosition;
 }

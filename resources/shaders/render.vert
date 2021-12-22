@@ -2,8 +2,9 @@
 
 layout(location = 0) in vec4 position;
 layout(location = 1) in vec3 normal;
-layout(location = 2) in vec3 color;
-layout(location = 3) in mat4 local_transform;
+layout(location = 2) in vec2 uv;
+layout(location = 3) in vec3 color;
+layout(location = 4) in mat4 local_transform;
 
 layout(push_constant) uniform MVP{
     mat4 model;
@@ -15,6 +16,7 @@ layout(location = 0) out struct{
     vec3 position;
     vec3 normal;
     vec3 color;
+    vec2 uv;
 } v_out;
 
 
@@ -26,6 +28,6 @@ void main(){
     v_out.position = worldPosition.xyz;
     v_out.normal = worldNormal;
     v_out.color = color;
-
+    v_out.uv = uv;
     gl_Position = projection * view * worldPosition;
 }

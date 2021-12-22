@@ -2,6 +2,9 @@
 #include <vulkan_util/GraphicsPipelineBuilder.hpp>
 #include <vulkan_util/DescriptorSetBuilder.hpp>
 #include <vulkan_util/glm_format.h>
+#include "utility.hpp"
+#include <vulkan_util/ImGuiPlugin.hpp>
+#include <vulkan_util/random.h>
 
 GameWorld::GameWorld(const Settings& settings) : VulkanBaseApp("Game Physics In One Weekend", settings) {
     fileManager.addSearchPath("spv");
@@ -18,8 +21,19 @@ void GameWorld::initApp() {
     createRenderPipeline();
     createComputePipeline();
     createSphereEntity();
-    createSphereInstance({1, 0, 0}, 1.0f, 0.8f, 1.0f, {0, 10, 0});
-    createSphereInstance({0, 1, 0}, 0.0f, 1.0f, 1000, {0, -1000, 0});
+    createSphereInstance({1, 0, 0}, 1.0f, 0.8f, 1.0f, {0, 11, 0});
+    createSphereInstance({0, 1, 0}, 1.0f, 0.8f, 1.0f, {0, 10, 0.3});
+    createSphereInstance({1, 1, 1}, 0.0f, 1.0f, 1000, {0, -1000, 0});
+
+
+    auto& rendercomp = sphereEntity.get<component::Render>();
+    auto instanceData = reinterpret_cast<InstanceData*>(rendercomp.vertexBuffers[1].map());
+    for(int i = 0; i < rendercomp.instanceCount; i++){
+        spdlog::info("color: {}", instanceData[i].color);
+        spdlog::info("transform:");
+        spdlog::info("{}",  instanceData[i].transform);
+        spdlog::info("");
+    }
 }
 
 void GameWorld::createDescriptorPool() {
@@ -70,11 +84,12 @@ void GameWorld::createRenderPipeline() {
                 .addVertexBindingDescription(1, sizeof(InstanceData), VK_VERTEX_INPUT_RATE_INSTANCE)
                 .addVertexAttributeDescription(0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(Vertex, position))
                 .addVertexAttributeDescription(1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetOf(Vertex, normal))
-                .addVertexAttributeDescription(2, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetOf(InstanceData, color))
-                .addVertexAttributeDescription(3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(InstanceData, transform))
-                .addVertexAttributeDescription(4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(InstanceData, transform) + 16)
-                .addVertexAttributeDescription(5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(InstanceData, transform) + 32)
-                .addVertexAttributeDescription(6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(InstanceData, transform) + 48)
+                .addVertexAttributeDescription(2, 0, VK_FORMAT_R32G32_SFLOAT, offsetOf(Vertex, uv))
+                .addVertexAttributeDescription(3, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetOf(InstanceData, color))
+                .addVertexAttributeDescription(4, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(InstanceData, transform))
+                .addVertexAttributeDescription(5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(InstanceData, transform) + 16)
+                .addVertexAttributeDescription(6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(InstanceData, transform) + 32)
+                .addVertexAttributeDescription(7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(InstanceData, transform) + 48)
             .inputAssemblyState()
                 .triangles()
             .viewportState()
@@ -155,6 +170,7 @@ VkCommandBuffer *GameWorld::buildCommandBuffers(uint32_t imageIndex, uint32_t &n
     vkCmdBeginRenderPass(commandBuffer, &rPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     renderEntities(commandBuffer);
+    renderUI(commandBuffer);
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -229,8 +245,12 @@ void GameWorld::createSphereEntity() {
     auto sphere = primitives::sphere(50, 50, 1.0f, glm::mat4(1), glm::vec4(0), VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 
     auto vertices = device.createDeviceLocalBuffer(sphere.vertices.data(), BYTE_SIZE(sphere.vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    device.setName<VK_OBJECT_TYPE_BUFFER>("sphere_vertices", vertices.buffer);
     auto indexes = device.createDeviceLocalBuffer(sphere.indices.data(), BYTE_SIZE(sphere.indices), VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+    device.setName<VK_OBJECT_TYPE_BUFFER>("sphere_indices", indexes.buffer);
     auto instances = device.createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(InstanceData) * 1000, "sphere_xforms");
+
+
     auto& renderComponent = sphereEntity.get<component::Render>();
     renderComponent.instanceCount = 0;
     renderComponent.indexCount = sphere.indices.size();
@@ -255,12 +275,14 @@ void GameWorld::createSphereInstance(glm::vec3 color, float mass, float elastici
     entity.get<component::Position>().value = center;
     entity.get<component::Scale>().value = glm::vec3(radius);
     entity.get<component::Rotation>().value = glm::quat(1, 0, 0 ,0);
+
     auto& body = entity.add<Body>();
     body.position = center;
     body.orientation = glm::quat(1, 0, 0, 0);
     body.invMass = mass <= 0 ? 0 : 1.0f/mass;
     body.shape = std::make_shared<SphereShape>(radius);
     body.elasticity = elasticity;
+    bodies.push_back(&body);
 
     updateEntityTransforms();
     InstanceData* instances = reinterpret_cast<InstanceData*>(sphereRender.vertexBuffers[1].map());
@@ -271,37 +293,33 @@ void GameWorld::createSphereInstance(glm::vec3 color, float mass, float elastici
 }
 
 void GameWorld::updateBodies(float dt) {
-    auto view = registry.view<Body>();
-
-    for(auto entity : view){
-        auto& body = view.get<Body>(entity);
-        float mass = 1.0f/body.invMass;
+    for(auto body : bodies){
+        float mass = 1.0f/body->invMass;
         auto impulseGravity = GRAVITY * mass * dt;
-        body.applyImpulseLinear(impulseGravity);
-
+        body->applyImpulseLinear(impulseGravity);
     }
 
     // collision check
-    for(auto entityA : view){
-        auto viewB = registry.view<Body>();
-        for(auto entityB : viewB){
-            if(entityA == entityB ) continue;
+    auto numBodies = bodies.size();
+    for(int i = 0; i < numBodies; i++){
+        for(int j = i + 1; j < numBodies; j++){
 
-            auto& bodyA = view.get<Body>(entityA);
-            auto& bodyB = viewB.get<Body>(entityB);
+            auto& bodyA = *bodies[i];
+            auto& bodyB = *bodies[j];
             if(bodyA.invMass == 0 && bodyB.invMass == 0) continue;
 
-            Contact contact;
+            Contact contact{};
             if(intersect(bodyA, bodyB, contact)){
                 resolveContact(contact);
             }
         }
     }
 
-    for(auto entity : view){
-        auto& body = view.get<Body>(entity);
-        body.update(dt);
+    for(auto body : bodies){
+        body->update(dt);
     }
+    int i = 1;
+//    spdlog::info("body[id: {}, position: {}, velocity: {}]", i, bodies[i]->position, bodies[i]->linearVelocity);
 }
 
 void GameWorld::updateTransforms() {
@@ -326,6 +344,7 @@ void GameWorld::updateInstanceTransforms() {
     for(auto entity : view){
         auto& transform = view.get<component::Transform>(entity);
         instanceBuffer[i].transform = transform.value;
+        i++;
     }
     renderComp.vertexBuffers[1].unmap();
 }
@@ -350,17 +369,63 @@ bool GameWorld::intersect(Body &bodyA, Body &bodyB, Contact& contact) {
 void GameWorld::resolveContact(Contact &contact) {
     auto bodyA = contact.bodyA;
     auto bodyB = contact.bodyB;
+
+    const auto pointOnA = contact.worldSpace.pointOnA;
+    const auto pointOnB = contact.worldSpace.pointOnB;
+
     auto invMassA = bodyA->invMass;
     auto invMassB = bodyB->invMass;
 
     auto elasticity = bodyA->elasticity * bodyB->elasticity;
 
-    const auto& n = contact.normal;
-    const auto relVelocity = bodyA->linearVelocity - bodyB->linearVelocity;
-    const auto  impulseJ = -(1.0f + elasticity) * dot(n, relVelocity) / (invMassA + invMassB);
+    const auto invWorldInertiaA = bodyA->inverseInertialTensorWorldSpace();
+    const auto invWorldInertiaB = bodyB->inverseInertialTensorWorldSpace();
 
-    bodyA->applyImpulseLinear(n * impulseJ);
-    bodyB->applyImpulseLinear(-n * impulseJ);
+    const auto& n = contact.normal;
+
+    const auto ra = pointOnA - bodyA->centerOfMassWorldSpace();
+    const auto rb = pointOnB - bodyB->centerOfMassWorldSpace();
+
+    const auto angularJA = glm::cross(invWorldInertiaA * glm::cross(ra, n), ra);
+    const auto angularJB = glm::cross(invWorldInertiaB * glm::cross(rb, n), rb);
+    const auto angularFactor = glm::dot(angularJA + angularJB, n);
+
+    // Get the world space velocity of the motion and rotation;
+    const auto velA = bodyA->linearVelocity + glm::cross(bodyA->angularVelocity, ra);
+    const auto velB = bodyB->linearVelocity + glm::cross(bodyB->angularVelocity, rb);
+
+
+    const auto relVelocity = velA - velB;
+    const auto  impulseJ = (1.0f + elasticity) * dot(n, relVelocity) / (invMassA + invMassB + angularFactor);
+    const auto vecImpulseJ = n * impulseJ;
+
+    bodyA->applyImpulse(pointOnA, -vecImpulseJ);
+    bodyB->applyImpulse(pointOnB, vecImpulseJ);
+
+    // calculate the impluse caused by friction
+    const auto frictionA = bodyA->friction;
+    const auto frictionB = bodyB->friction;
+    const auto friction = frictionA * frictionB;
+
+    const auto normalVelocity = n * glm::dot(n, relVelocity);
+    const auto tangentVelocity = relVelocity - normalVelocity;
+
+    if(!isZero(tangentVelocity)) {
+        const auto relTangentVelocity = glm::normalize(tangentVelocity);
+        const auto inertiaA = glm::cross(invWorldInertiaA * glm::cross(ra, relTangentVelocity), ra);
+        const auto inertiaB = glm::cross(invWorldInertiaB * glm::cross(rb, relTangentVelocity), rb);
+        const auto invInertia = glm::dot(inertiaA + inertiaB, relTangentVelocity);
+
+        // calculate tangentail impulse for friction
+        const auto reducedMass = 1.0f / (invMassA + invMassB + invInertia);
+        const auto impulseFriction = tangentVelocity * reducedMass * friction;
+
+        // apply kinetic fiction
+        bodyA->applyImpulse(pointOnA, -impulseFriction);
+        bodyB->applyImpulse(pointOnB, impulseFriction);
+//        spdlog::info("impulse velocity: {}, impulse friction: {}", impulseJ, impulseFriction);
+    }
+
 
     const auto ta = bodyA->invMass / (bodyA->invMass + bodyB->invMass);
     const auto tb = bodyB->invMass / (bodyA->invMass + bodyB->invMass);
@@ -368,4 +433,29 @@ void GameWorld::resolveContact(Contact &contact) {
     const auto ds = contact.worldSpace.pointOnB - contact.worldSpace.pointOnA;
     bodyA->position += ds * ta;
     bodyB->position -= ds * tb;
+}
+
+void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
+
+    ImGui::Begin("Physics");
+    ImGui::SetWindowSize("Physics", {400, 350});
+
+    if(ImGui::TreeNodeEx("Rigid Bodies", ImGuiTreeNodeFlags_DefaultOpen)) {
+        for (auto i = 0; i < bodies.size(); i++) {
+            auto body = bodies[i];
+            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+            if(ImGui::TreeNode((void *) (intptr_t) i, "Body %d", i)) {
+                ImGui::Text("position: %s", fmt::format("{}", body->position).c_str());
+                ImGui::Text("velocity (linear): %s", fmt::format("{}", body->linearVelocity).c_str());
+                ImGui::Text("velocity (angular): %s", fmt::format("{}", body->angularVelocity).c_str());
+                ImGui::Text("mass : %f kg", body->invMass == 0 ? 0 : 1.0/body->invMass);
+                ImGui::TreePop();
+            }
+        }
+        ImGui::TreePop();
+    }
+    ImGui::Text("fps: %d", framePerSecond);
+    ImGui::End();
+
+    plugin(IM_GUI_PLUGIN).draw(commandBuffer);
 }
