@@ -178,8 +178,8 @@ void GameWorld::update(float time) {
     if(m_runPhysics && elapsedTimeMs % dtMs == 0){
         static uint64_t physicsFrames = 1;
         auto duration = profile([&]{ fixedUpdate(dt); });
-        simStates.physicsTime += static_cast<float>(duration.count());
-        simStates.physicsTime /= static_cast<float>(physicsFrames);
+        auto frameTime = static_cast<float>(duration.count());
+        simStates.physicsTime = glm::mix(simStates.physicsTime, frameTime, 1.0/static_cast<float>(physicsFrames));
         physicsFrames++;
     }
     if(moveCamera) {

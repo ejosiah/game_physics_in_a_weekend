@@ -84,7 +84,7 @@ inline void sort(const std::vector<Body*>& bodies, std::vector<PsuedoBody>& psue
         bounds.expand(bounds.min + glm::vec3(-1) * epsilon);
         bounds.expand(bounds.max + glm::vec3(1) * epsilon);
 
-        PsuedoBody psuedoBody{ i, glm::dot(axis, bounds.max), true};
+        PsuedoBody psuedoBody{ i, glm::dot(axis, bounds.min), true};
         psuedoBodies.push_back(psuedoBody);
 
         psuedoBody.value = glm::dot(axis, bounds.max);
@@ -129,7 +129,7 @@ inline void sweepAndPrune1D(const std::vector<Body*>& bodies, std::vector<Collis
     buildPairs(finalPairs, psuedoBodies);
 }
 
-inline void broadPhase(const std::vector<Body*>& bodies, std::vector<CollisionPair> finalPairs, const float dt){
+inline void broadPhase(const std::vector<Body*>& bodies, std::vector<CollisionPair>& finalPairs, const float dt){
     finalPairs.clear();
     sweepAndPrune1D(bodies, finalPairs, dt);
 }
