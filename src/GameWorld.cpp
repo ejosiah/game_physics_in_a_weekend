@@ -250,7 +250,7 @@ void GameWorld::initCamera() {
     settings.acceleration = glm::vec3(5);
     cameraController = std::make_unique<CameraController>(device, swapChain.imageCount(), currentImageIndex, dynamic_cast<InputManager&>(*this), settings);
     cameraController->setMode(CameraMode::SPECTATOR);
-    cameraController->lookAt({9.6, 10, 13}, {0, 3, 0}, {0, 1, 0});
+    cameraController->lookAt({18, 17, 25}, {0, 3, 0}, {0, 1, 0});
 
     auto cameraEntity = createEntity("camera");
     cameraEntity.add<component::Camera>().camera = const_cast<Camera*>(&cameraController->cam());
@@ -305,32 +305,36 @@ void GameWorld::updateBodies(float dt) {
         body->applyImpulseLinear(impulseGravity);
     }
 
-    // collision check
+    // broad phase
+    std::vector<CollisionPair> collisionPairs;
+    broadPhase(bodies, collisionPairs, dt);
+
+    // Narrow Phase
     auto numBodies = bodies.size();
     static std::vector<Contact> contacts;
     contacts.clear();
     contacts.reserve(numBodies * numBodies);
-    for(int i = 0; i < numBodies; i++){
-        for(int j = i + 1; j < numBodies; j++){
 
-            auto& bodyA = *bodies[i];
-            auto& bodyB = *bodies[j];
-            if(bodyA.invMass == 0 && bodyB.invMass == 0) continue;
+    for(const auto pair : collisionPairs){
+        auto& bodyA = *bodies[pair.a];
+        auto& bodyB = *bodies[pair.b];
+        if(bodyA.invMass == 0 && bodyB.invMass == 0) continue;
 
-            Contact contact{};
-            if(intersect(bodyA, bodyB, dt, contact)){
-                contacts.push_back(contact);
-            }
+        Contact contact{};
+        if(intersect(bodyA, bodyB, dt, contact)){
+            contacts.push_back(contact);
         }
     }
 
-    simStates.numCollisions = contacts.size();
+    simStates.numCollisions = static_cast<int>(contacts.size());
     if(simStates.numCollisions > 1){
+        // TODO check performance of std::sort
         std::sort(begin(contacts), end(contacts), [](auto a, auto b){
             return a.timeOfImpact < b.timeOfImpact;
         });
     }
 
+    // apply ballistic impulse
     float accumulatedTime = 0.0f;
     for(auto& contact : contacts){
         const auto dt = contact.timeOfImpact - accumulatedTime;
@@ -539,36 +543,45 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
 
 void GameWorld::createSceneObjects() {
     auto smallSphere = std::make_shared<SphereShape>(0.5f);
+    auto bigSphere = std::make_shared<SphereShape>(80.5f);
     auto builder = ObjectBuilder(sphereEntity, &registry);
-    builder
-        .color(randomColor())
-        .position(-3, 3, 0)
-        .orientation(1, 0, 0, 0)
-        .linearVelocity(1000, 0, 0)
-        .mass(1.0)
-        .elasticity(0.5)
-        .shape(smallSphere)
-    .build();
 
-    builder
-        .color(randomColor())
-        .position(0, 3, 0)
-        .orientation(1, 0, 0, 0)
-        .linearVelocity(0, 0, 0)
-        .mass(0)
-        .elasticity(0.5)
-        .shape(smallSphere)
-    .build();
-
-    builder
-        .color({1, 1, 1})
-        .position(0, -1000, 0)
-        .orientation(1, 0, 0, 0)
-        .linearVelocity(0, 0, 0)
-        .mass(0)
-        .elasticity(1.0)
-        .shape(std::make_shared<SphereShape>(1000.0f))
-    .build();
+    // dynamic bodies
+    for(int x = 0; x < 6; x++){
+        for(int z = 0; z < 6; z++){
+            auto radius = smallSphere->m_radius;
+            auto xx = float(x - 1) * radius * 1.5f;
+            auto zz = float(z - 1) * radius * 1.5f;
+            builder
+                .color(randomColor())
+                .position(xx, 10.0f, zz)
+                .orientation(1, 0, 0, 0)
+                .linearVelocity(0, 0, 0)
+                .mass(1.0)
+                .elasticity(0.5)
+                .friction(0.5)
+                .shape(smallSphere)
+            .build();
+        }
+    }
+    // static bodies
+    for(int x = 0; x < 3; x++){
+        for(int z = 0; z < 3; z++){
+            auto radius = bigSphere->m_radius;
+            auto xx = float(x - 1) * radius * 0.25f;
+            auto zz = float(z - 1) * radius * 0.25f;
+            builder
+                .color({1, 1, 1})
+                .position(xx, -radius, zz)
+                .orientation(1, 0, 0, 0)
+                .linearVelocity(0, 0, 0)
+                .mass(0.0)
+                .elasticity(0.999)
+                .friction(0.5)
+                .shape(bigSphere)
+            .build();
+        }
+    }
 
     auto view = registry.view<Body>();
     for(auto entity : view){

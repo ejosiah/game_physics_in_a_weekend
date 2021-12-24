@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 #include "intersectiontest.hpp"
+#include "bounds.hpp"
 
 class Shape{
 public:
@@ -12,9 +13,18 @@ public:
 
     virtual ShapeType_t type() const = 0;
 
+    [[nodiscard]]
     virtual glm::mat3 inertiaTensor() const = 0;
 
+    [[nodiscard]]
     virtual glm::vec3 centerOfMass() const { return m_centerOfMass; }
+
+    [[nodiscard]]
+    virtual Bounds bounds(const glm::vec3& pos, const glm::quat& orient) const = 0;
+
+    [[nodiscard]]
+    virtual Bounds bounds() const = 0;
+
 protected:
     glm::vec3 m_centerOfMass{0};
 };
@@ -34,6 +44,12 @@ public:
     glm::mat3 SphereShape::inertiaTensor() const {
         return glm::mat3(2.0f * m_radius * m_radius / 5.0f);
     }
+
+    [[nodiscard]]
+    Bounds bounds(const glm::vec3 &pos, const glm::quat &orient) const final;
+
+    [[nodiscard]]
+    Bounds bounds() const final;
 
     float m_radius{1};
 };
