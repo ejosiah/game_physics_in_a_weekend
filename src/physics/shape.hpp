@@ -21,6 +21,7 @@ protected:
 class SphereShape final : public Shape{
 public:
     friend class GameWorld;
+    friend class ObjectBuilder;
     explicit SphereShape(float radius) : m_radius(radius){}
 
     [[nodiscard]]
@@ -28,10 +29,10 @@ public:
         return ShapeType_t::SHAPE_SPHERE;
     }
 
+    [[nodiscard]]
     glm::mat3 SphereShape::inertiaTensor() const {
         return glm::mat3(2.0f * m_radius * m_radius / 5.0f);
     }
-
 private:
     float m_radius{1};
 };

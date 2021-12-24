@@ -111,3 +111,5 @@ build
 .idea
 
 doc
+
+imgui.ini

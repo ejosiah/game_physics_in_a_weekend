@@ -5,18 +5,14 @@
 #include <vulkan_util/SkyBox.hpp>
 #include "body.hpp"
 #include "contact.hpp"
+#include "objectbuilder.hpp"
 
-struct InstanceData{
-    glm::mat4 transform;
-    glm::vec3 color;
-};
-
-struct Color{
-    glm::vec3 value;
-};
-
-struct SkyBoxTag{};
-struct SphereTag{};
+//struct Color{
+//    glm::vec3 value;
+//};
+//
+//struct SkyBoxTag{};
+//struct SphereTag{};
 
 class GameWorld : public VulkanBaseApp{
 public:
@@ -30,6 +26,8 @@ protected:
     void createSphereEntity();
 
     void createSphereInstance(glm::vec3 color, float mass = 1.0f, float elasticity = 1.0f, float radius = 1.0f, const glm::vec3& center = {0, 0, 0});
+
+    void createSceneObjects();
 
     void createDescriptorPool();
 
@@ -50,6 +48,8 @@ protected:
     VkCommandBuffer *buildCommandBuffers(uint32_t imageIndex, uint32_t &numCommandBuffers) override;
 
     void update(float time) override;
+
+    void fixedUpdate(float dt);
 
     void renderUI(VkCommandBuffer commandBuffer);
 
@@ -87,6 +87,10 @@ protected:
     std::unique_ptr<CameraController> cameraController;
     SkyBox skyBox;
     Entity sphereEntity;
+    bool m_runPhysics{false};
     const glm::vec3 GRAVITY{0, -10, 0};
     std::vector<Body*> bodies;
+    Action* createSphereAction;
+    float targetFrameRate{120};
+    int iterations{1};
 };

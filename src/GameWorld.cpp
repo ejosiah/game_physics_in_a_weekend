@@ -9,6 +9,7 @@
 GameWorld::GameWorld(const Settings& settings) : VulkanBaseApp("Game Physics In One Weekend", settings) {
     fileManager.addSearchPath("spv");
     fileManager.addSearchPath("shaders");
+    createSphereAction = &mapToMouse(static_cast<int>(MouseEvent::Button::RIGHT), "sphere", Action::detectInitialPressOnly());
 }
 
 void GameWorld::initApp() {
@@ -21,19 +22,10 @@ void GameWorld::initApp() {
     createRenderPipeline();
     createComputePipeline();
     createSphereEntity();
-    createSphereInstance({1, 0, 0}, 1.0f, 0.8f, 1.0f, {0, 11, 0});
-    createSphereInstance({0, 1, 0}, 1.0f, 0.8f, 1.0f, {0, 10, 0.3});
-    createSphereInstance({1, 1, 1}, 0.0f, 1.0f, 1000, {0, -1000, 0});
+//    createSphereInstance({1, 1, 1}, 0.0f, 1.0f, 1000, {0, -1000, 0});
+//    createSphereInstance({1, 0, 0}, 0.0f, 1.0f, 1, {0, 1, 0});
+    createSceneObjects();
 
-
-    auto& rendercomp = sphereEntity.get<component::Render>();
-    auto instanceData = reinterpret_cast<InstanceData*>(rendercomp.vertexBuffers[1].map());
-    for(int i = 0; i < rendercomp.instanceCount; i++){
-        spdlog::info("color: {}", instanceData[i].color);
-        spdlog::info("transform:");
-        spdlog::info("{}",  instanceData[i].transform);
-        spdlog::info("");
-    }
 }
 
 void GameWorld::createDescriptorPool() {
@@ -180,17 +172,35 @@ VkCommandBuffer *GameWorld::buildCommandBuffers(uint32_t imageIndex, uint32_t &n
 }
 
 void GameWorld::update(float time) {
-    updateBodies(time);
+    static float dt = 1.0f/targetFrameRate;
+    static int dtMs = static_cast<int>(dt * 1000);
+    int elapsedTimeMs = static_cast<int>(elapsedTime * 1000);
+    if(m_runPhysics && elapsedTimeMs % dtMs == 0){
+        fixedUpdate(dt);
+    }
+    cameraController->update(time);
+
+}
+
+void GameWorld::fixedUpdate(float dt) {
+    float deltaTime = dt/float(iterations);
+    for(auto i = 0; i < iterations; i++){
+        updateBodies(deltaTime);
+    }
     updateTransforms();
     updateEntityTransforms();
     updateInstanceTransforms();
-    cameraController->update(time);
-//    if(int(elapsedTime) % 5 == 0){
-//        spdlog::info("cam pos: {}", cameraController->position());
-//    }
 }
 
 void GameWorld::checkAppInputs() {
+    if(createSphereAction->isPressed()){
+        const auto& cam = cameraController->cam();
+        auto dir = glm::unProject(glm::vec3(mouse.position, 1), cam.view, cam.proj, glm::vec4{0, 0, width, height});
+        dir = glm::normalize(dir);
+        auto t = glm::length(cameraController->position());
+        auto pos = cameraController->position() + dir * t;
+        createSphereInstance(randomColor(), 1.0f, 0.8f, 1.0f, pos);
+    }
     cameraController->processInput();
 }
 
@@ -232,7 +242,7 @@ void GameWorld::initCamera() {
     settings.acceleration = glm::vec3(5);
     cameraController = std::make_unique<CameraController>(device, swapChain.imageCount(), currentImageIndex, dynamic_cast<InputManager&>(*this), settings);
     cameraController->setMode(CameraMode::SPECTATOR);
-    cameraController->lookAt({28.174, 16.484, 28.524}, {0, 0, 0}, {0, 1, 0});
+    cameraController->lookAt({9.6, 10, 13}, {0, 3, 0}, {0, 1, 0});
 
     auto cameraEntity = createEntity("camera");
     cameraEntity.add<component::Camera>().camera = const_cast<Camera*>(&cameraController->cam());
@@ -267,29 +277,17 @@ void GameWorld::createSphereEntity() {
 }
 
 void GameWorld::createSphereInstance(glm::vec3 color, float mass, float elasticity, float radius, const glm::vec3& center) {
-    
-    auto& sphereRender = sphereEntity.get<component::Render>();
-    auto entity = createEntity(fmt::format("sphere_{}", sphereRender.instanceCount));
-    entity.add<SphereTag>();
-    entity.add<Color>().value = color;
-    entity.get<component::Position>().value = center;
-    entity.get<component::Scale>().value = glm::vec3(radius);
-    entity.get<component::Rotation>().value = glm::quat(1, 0, 0 ,0);
 
-    auto& body = entity.add<Body>();
-    body.position = center;
-    body.orientation = glm::quat(1, 0, 0, 0);
-    body.invMass = mass <= 0 ? 0 : 1.0f/mass;
-    body.shape = std::make_shared<SphereShape>(radius);
-    body.elasticity = elasticity;
-    bodies.push_back(&body);
+    auto entity =
+        ObjectBuilder(sphereEntity, &registry)
+            .shape(std::make_shared<SphereShape>(radius))
+            .color(color)
+            .position(center)
+            .mass(mass)
+            .elasticity(elasticity)
+        .build();
+    bodies.push_back(&entity.get<Body>());
 
-    updateEntityTransforms();
-    InstanceData* instances = reinterpret_cast<InstanceData*>(sphereRender.vertexBuffers[1].map());
-    instances[sphereRender.instanceCount].transform = entity.get<component::Transform>().value;
-    instances[sphereRender.instanceCount].color = color;
-    sphereRender.vertexBuffers[1].unmap();
-    sphereRender.instanceCount++;
 }
 
 void GameWorld::updateBodies(float dt) {
@@ -318,8 +316,6 @@ void GameWorld::updateBodies(float dt) {
     for(auto body : bodies){
         body->update(dt);
     }
-    int i = 1;
-//    spdlog::info("body[id: {}, position: {}, velocity: {}]", i, bodies[i]->position, bodies[i]->linearVelocity);
 }
 
 void GameWorld::updateTransforms() {
@@ -339,12 +335,12 @@ void GameWorld::updateInstanceTransforms() {
     auto renderComp = sphereEntity.get<component::Render>();
     auto instanceBuffer = reinterpret_cast<InstanceData*>(renderComp.vertexBuffers[1].map());
 
-    auto i = 0;
+    auto i = renderComp.instanceCount - 1;
     auto view = registry.view<SphereTag, component::Transform>();
     for(auto entity : view){
         auto& transform = view.get<component::Transform>(entity);
         instanceBuffer[i].transform = transform.value;
-        i++;
+        i--;
     }
     renderComp.vertexBuffers[1].unmap();
 }
@@ -363,7 +359,7 @@ bool GameWorld::intersect(Body &bodyA, Body &bodyB, Contact& contact) {
     contact.worldSpace.pointOnA = bodyA.position + contact.normal * sphereA->m_radius;
     contact.worldSpace.pointOnB = bodyB.position - contact.normal * sphereB->m_radius;
 
-    return dot(ab, ab) < (radiusAB * radiusAB);
+    return dot(ab, ab) <= (radiusAB * radiusAB);
 }
 
 void GameWorld::resolveContact(Contact &contact) {
@@ -440,22 +436,78 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
     ImGui::Begin("Physics");
     ImGui::SetWindowSize("Physics", {400, 350});
 
-    if(ImGui::TreeNodeEx("Rigid Bodies", ImGuiTreeNodeFlags_DefaultOpen)) {
-        for (auto i = 0; i < bodies.size(); i++) {
-            auto body = bodies[i];
-            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-            if(ImGui::TreeNode((void *) (intptr_t) i, "Body %d", i)) {
-                ImGui::Text("position: %s", fmt::format("{}", body->position).c_str());
-                ImGui::Text("velocity (linear): %s", fmt::format("{}", body->linearVelocity).c_str());
-                ImGui::Text("velocity (angular): %s", fmt::format("{}", body->angularVelocity).c_str());
-                ImGui::Text("mass : %f kg", body->invMass == 0 ? 0 : 1.0/body->invMass);
-                ImGui::TreePop();
-            }
+    // camera
+    {
+        if(ImGui::CollapsingHeader("Camera")){
+            auto& cam = cameraController;
+            ImGui::Text("Position: %s", fmt::format("{}", cam->position()).c_str());
+            ImGui::Text("Velocity: %s", fmt::format("{}", cam->velocity()).c_str());
+            ImGui::Text("acceleration: %s", fmt::format("{}", cam->acceleration()).c_str());
+            ImGui::Text("near: %s", fmt::format("{}", cam->near()).c_str());
+            ImGui::Text("far: %s", fmt::format("{}", cam->far()).c_str());
         }
-        ImGui::TreePop();
     }
+
+
+//    if(ImGui::TreeNodeEx("Rigid Bodies", ImGuiTreeNodeFlags_DefaultOpen)) {
+//        for (auto i = 0; i < bodies.size(); i++) {
+//            auto body = bodies[i];
+//            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+//            if(ImGui::TreeNode((void *) (intptr_t) i, "Body %d", i)) {
+//                ImGui::Text("position: %s", fmt::format("{}", body->position).c_str());
+//                ImGui::Text("velocity (linear): %s", fmt::format("{}", body->linearVelocity).c_str());
+//                ImGui::Text("velocity (angular): %s", fmt::format("{}", body->angularVelocity).c_str());
+//                ImGui::Text("mass : %f kg", body->invMass == 0 ? 0 : 1.0/body->invMass);
+//                ImGui::TreePop();
+//            }
+//        }
+//        ImGui::TreePop();
+//    }
+    m_runPhysics |= ImGui::Button("Run Physics");
+    auto numObjects = sphereEntity.get<component::Render>().instanceCount;
+    ImGui::Text("objects: %d", numObjects);
     ImGui::Text("fps: %d", framePerSecond);
     ImGui::End();
 
     plugin(IM_GUI_PLUGIN).draw(commandBuffer);
+}
+
+void GameWorld::createSceneObjects() {
+    auto smallSphere = std::make_shared<SphereShape>(0.5);
+    auto builder = ObjectBuilder(sphereEntity, &registry);
+    builder
+        .color(randomColor())
+        .position(-3, 3, 0)
+        .orientation(1, 0, 0, 0)
+        .linearVelocity(1000, 0, 0)
+        .mass(1.0)
+        .elasticity(0.5)
+        .shape(smallSphere)
+    .build();
+
+    builder
+        .color(randomColor())
+        .position(0, 3, 0)
+        .orientation(1, 0, 0, 0)
+        .linearVelocity(0, 0, 0)
+        .mass(0)
+        .elasticity(0.5)
+        .shape(smallSphere)
+    .build();
+
+    builder
+        .color({1, 1, 1})
+        .position(0, -1000, 0)
+        .orientation(1, 0, 0, 0)
+        .linearVelocity(0, 0, 0)
+        .mass(0)
+        .elasticity(1.0)
+        .shape(std::make_shared<SphereShape>(1000.0f))
+    .build();
+
+    auto view = registry.view<Body>();
+    for(auto entity : view){
+        auto body = &view.get<Body>(entity);
+        bodies.push_back(body);
+    }
 }
