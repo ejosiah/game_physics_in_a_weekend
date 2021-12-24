@@ -39,7 +39,7 @@ protected:
 
     void createComputePipeline();
 
-    bool intersect(Body& bodyA, Body& bodyB, Contact& contact);
+    bool intersect(Body& bodyA, Body& bodyB, float dt, Contact& contact);
 
     void onSwapChainDispose() override;
 
@@ -69,6 +69,15 @@ protected:
 
     void createSkyBox();
 
+    template<typename Func, typename durationType = chrono::milliseconds>
+    std::chrono::milliseconds profile(Func&& func){
+        auto startTime = std::chrono::high_resolution_clock::now();
+        func();
+        auto endTime = std::chrono::high_resolution_clock::now();
+        auto duration = endTime - startTime;
+        return std::chrono::duration_cast<durationType>(duration);
+    }
+
 protected:
     struct {
         VulkanPipelineLayout layout;
@@ -93,4 +102,12 @@ protected:
     Action* createSphereAction;
     float targetFrameRate{120};
     int iterations{1};
+    float timeScale{1};
+    bool moveCamera{false};
+
+    struct {
+        int numObjects{0};
+        int numCollisions{0};
+        float physicsTime{0};
+    } simStates;
 };

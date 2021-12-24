@@ -93,3 +93,7 @@ void Body::update(float dt) {
 
     position = com + glm::mat3(orientation) * comToPosition;
 }
+
+bool Body::hasInfiniteMass() const {
+    return invMass <= 0.0f;
+}

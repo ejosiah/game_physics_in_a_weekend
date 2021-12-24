@@ -176,16 +176,22 @@ void GameWorld::update(float time) {
     static int dtMs = static_cast<int>(dt * 1000);
     int elapsedTimeMs = static_cast<int>(elapsedTime * 1000);
     if(m_runPhysics && elapsedTimeMs % dtMs == 0){
-        fixedUpdate(dt);
+        static uint64_t physicsFrames = 1;
+        auto duration = profile([&]{ fixedUpdate(dt); });
+        simStates.physicsTime += static_cast<float>(duration.count());
+        simStates.physicsTime /= static_cast<float>(physicsFrames);
+        physicsFrames++;
     }
-    cameraController->update(time);
+    if(moveCamera) {
+        cameraController->update(time);
+    }
 
 }
 
 void GameWorld::fixedUpdate(float dt) {
     float deltaTime = dt/float(iterations);
     for(auto i = 0; i < iterations; i++){
-        updateBodies(deltaTime);
+        updateBodies(deltaTime * timeScale);
     }
     updateTransforms();
     updateEntityTransforms();
@@ -201,7 +207,9 @@ void GameWorld::checkAppInputs() {
         auto pos = cameraController->position() + dir * t;
         createSphereInstance(randomColor(), 1.0f, 0.8f, 1.0f, pos);
     }
-    cameraController->processInput();
+    if(moveCamera) {
+        cameraController->processInput();
+    }
 }
 
 void GameWorld::cleanup() {
@@ -299,6 +307,9 @@ void GameWorld::updateBodies(float dt) {
 
     // collision check
     auto numBodies = bodies.size();
+    static std::vector<Contact> contacts;
+    contacts.clear();
+    contacts.reserve(numBodies * numBodies);
     for(int i = 0; i < numBodies; i++){
         for(int j = i + 1; j < numBodies; j++){
 
@@ -307,10 +318,35 @@ void GameWorld::updateBodies(float dt) {
             if(bodyA.invMass == 0 && bodyB.invMass == 0) continue;
 
             Contact contact{};
-            if(intersect(bodyA, bodyB, contact)){
-                resolveContact(contact);
+            if(intersect(bodyA, bodyB, dt, contact)){
+                contacts.push_back(contact);
             }
         }
+    }
+
+    simStates.numCollisions = contacts.size();
+    if(simStates.numCollisions > 1){
+        std::sort(begin(contacts), end(contacts), [](auto a, auto b){
+            return a.timeOfImpact < b.timeOfImpact;
+        });
+    }
+
+    float accumulatedTime = 0.0f;
+    for(auto& contact : contacts){
+        const auto dt = contact.timeOfImpact - accumulatedTime;
+        auto bodyA = contact.bodyA;
+        auto bodyB = contact.bodyB;
+
+        if(bodyA->hasInfiniteMass() && bodyB->hasInfiniteMass()){
+            continue;
+        }
+
+        for(auto body : bodies){
+            body->update(dt);
+        }
+
+        resolveContact(contact);
+        accumulatedTime += dt;
     }
 
     for(auto body : bodies){
@@ -345,21 +381,43 @@ void GameWorld::updateInstanceTransforms() {
     renderComp.vertexBuffers[1].unmap();
 }
 
-bool GameWorld::intersect(Body &bodyA, Body &bodyB, Contact& contact) {
+bool GameWorld::intersect(Body &bodyA, Body &bodyB, float dt, Contact& contact) {
     contact.bodyA = &bodyA;
     contact.bodyB = &bodyB;
 
-    const auto ab = bodyB.position - bodyA.position;
-    contact.normal = normalize(ab);
+    if(const auto sphereA = dynamic_cast<SphereShape*>(bodyA.shape.get())){
+        if(const auto sphereB = dynamic_cast<SphereShape*>(bodyB.shape.get())){
+            auto posA = bodyA.position;
+            auto posB = bodyB.position;
 
-    const auto sphereA = dynamic_cast<SphereShape*>(bodyA.shape.get());
-    const auto sphereB = dynamic_cast<SphereShape*>(bodyB.shape.get());
-    const auto radiusAB = sphereA->m_radius + sphereB->m_radius;
+            auto velA = bodyA.linearVelocity;
+            auto velB = bodyB.linearVelocity;
 
-    contact.worldSpace.pointOnA = bodyA.position + contact.normal * sphereA->m_radius;
-    contact.worldSpace.pointOnB = bodyB.position - contact.normal * sphereB->m_radius;
+            if(sphereSphere(sphereA, sphereB, posA, posB, velA, velB, dt, contact.worldSpace.pointOnA, contact.worldSpace.pointOnB, contact.timeOfImpact)){
+                // set bodies forward to get local space collision points;
+                bodyA.update(contact.timeOfImpact);
+                bodyB.update(contact.timeOfImpact);
 
-    return dot(ab, ab) <= (radiusAB * radiusAB);
+                // convert world space contact to local space;
+                contact.LocalSpace.pointOnA = bodyA.worldSpaceToBodySpace(contact.worldSpace.pointOnA);
+                contact.LocalSpace.pointOnB = bodyB.worldSpaceToBodySpace(contact.worldSpace.pointOnB);
+
+                contact.normal = glm::normalize(bodyA.position - bodyB.position);
+
+                // unwind time step;
+                bodyA.update(-contact.timeOfImpact);
+                bodyB.update(-contact.timeOfImpact);
+
+                // calculate the separation distance
+                auto ab = bodyB.position - bodyA.position;
+                float r = glm::length(ab) - (sphereA->m_radius + sphereB->m_radius);
+                contact.separationDistance = r;
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 void GameWorld::resolveContact(Contact &contact) {
@@ -391,6 +449,7 @@ void GameWorld::resolveContact(Contact &contact) {
     const auto velB = bodyB->linearVelocity + glm::cross(bodyB->angularVelocity, rb);
 
 
+    // calculate collision impulse
     const auto relVelocity = velA - velB;
     const auto  impulseJ = (1.0f + elasticity) * dot(n, relVelocity) / (invMassA + invMassB + angularFactor);
     const auto vecImpulseJ = n * impulseJ;
@@ -419,27 +478,28 @@ void GameWorld::resolveContact(Contact &contact) {
         // apply kinetic fiction
         bodyA->applyImpulse(pointOnA, -impulseFriction);
         bodyB->applyImpulse(pointOnB, impulseFriction);
-//        spdlog::info("impulse velocity: {}, impulse friction: {}", impulseJ, impulseFriction);
     }
 
+    if(contact.timeOfImpact == 0.0f){
+        const auto ta = bodyA->invMass / (bodyA->invMass + bodyB->invMass);
+        const auto tb = bodyB->invMass / (bodyA->invMass + bodyB->invMass);
 
-    const auto ta = bodyA->invMass / (bodyA->invMass + bodyB->invMass);
-    const auto tb = bodyB->invMass / (bodyA->invMass + bodyB->invMass);
-
-    const auto ds = contact.worldSpace.pointOnB - contact.worldSpace.pointOnA;
-    bodyA->position += ds * ta;
-    bodyB->position -= ds * tb;
+        const auto ds = contact.worldSpace.pointOnB - contact.worldSpace.pointOnA;
+        bodyA->position += ds * ta;
+        bodyB->position -= ds * tb;
+    }
 }
 
 void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
 
     ImGui::Begin("Physics");
-    ImGui::SetWindowSize("Physics", {400, 350});
+    ImGui::SetWindowSize("Physics", {300, 350});
 
     // camera
     {
-        if(ImGui::CollapsingHeader("Camera")){
+        if(ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)){
             auto& cam = cameraController;
+            ImGui::Checkbox("Move Camera", &moveCamera);
             ImGui::Text("Position: %s", fmt::format("{}", cam->position()).c_str());
             ImGui::Text("Velocity: %s", fmt::format("{}", cam->velocity()).c_str());
             ImGui::Text("acceleration: %s", fmt::format("{}", cam->acceleration()).c_str());
@@ -463,9 +523,14 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
 //        }
 //        ImGui::TreePop();
 //    }
+
+    if(ImGui::CollapsingHeader("Simulation Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Objects: %d", simStates.numObjects);
+        ImGui::Text("Collisions: %d", simStates.numCollisions);
+        ImGui::Text("Physics average %.3f ms/frame", simStates.physicsTime);
+    }
     m_runPhysics |= ImGui::Button("Run Physics");
-    auto numObjects = sphereEntity.get<component::Render>().instanceCount;
-    ImGui::Text("objects: %d", numObjects);
+    ImGui::SliderFloat("sim Speed", &timeScale, 0.001f, 1.0f, "%.3f", ImGuiSliderFlags_NoInput);
     ImGui::Text("fps: %d", framePerSecond);
     ImGui::End();
 
@@ -473,7 +538,7 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
 }
 
 void GameWorld::createSceneObjects() {
-    auto smallSphere = std::make_shared<SphereShape>(0.5);
+    auto smallSphere = std::make_shared<SphereShape>(0.5f);
     auto builder = ObjectBuilder(sphereEntity, &registry);
     builder
         .color(randomColor())
@@ -510,4 +575,6 @@ void GameWorld::createSceneObjects() {
         auto body = &view.get<Body>(entity);
         bodies.push_back(body);
     }
+
+    simStates.numObjects = bodies.size();
 }

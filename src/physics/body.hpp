@@ -40,4 +40,6 @@ struct Body{
     void applyImpulse(const glm::vec3& impulsePoint, const glm::vec3& impulse);
 
     void update(float dt);
+
+    bool hasInfiniteMass() const;
 };
