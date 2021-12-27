@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <glm/glm.hpp>
+#include "shape.hpp"
 
 inline bool raySphere(const glm::vec3 rayStart, const glm::vec3 rayDir, const glm::vec3& sphereCenter, const float sphereRadius, float& t1, float& t2){
     const auto m = sphereCenter - rayStart;

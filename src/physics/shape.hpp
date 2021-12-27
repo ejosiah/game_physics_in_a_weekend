@@ -1,17 +1,20 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
+#include <array>
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include "intersectiontest.hpp"
 #include "bounds.hpp"
 
 class Shape{
 public:
-    enum class ShapeType_t : uint32_t {
-        SHAPE_SPHERE
+    enum class Type : uint32_t {
+        SPHERE, BOX, CONVEX_HULL;
     };
 
-    virtual ShapeType_t type() const = 0;
+    virtual Type type() const = 0;
 
     [[nodiscard]]
     virtual glm::mat3 inertiaTensor() const = 0;
@@ -25,6 +28,16 @@ public:
     [[nodiscard]]
     virtual Bounds bounds() const = 0;
 
+    virtual void build(const std::vector<glm::vec3>& points){}
+
+    [[nodiscard]]
+    virtual glm::vec3 support(const glm::vec3& dir, const glm::vec3& pos, const glm::quat& orient, float bias) const = 0;
+
+    [[nodiscard]]
+    virtual float fastLinearSpeed(const glm::vec3& angularVelocity, const glm::vec3& dir) const {
+        return 0.0f;
+    }
+
 protected:
     glm::vec3 m_centerOfMass{0};
 };
@@ -36,8 +49,8 @@ public:
     explicit SphereShape(float radius) : m_radius(radius){}
 
     [[nodiscard]]
-    ShapeType_t type() const final {
-        return ShapeType_t::SHAPE_SPHERE;
+    Type type() const final {
+        return Type::SPHERE;
     }
 
     [[nodiscard]]
@@ -51,54 +64,44 @@ public:
     [[nodiscard]]
     Bounds bounds() const final;
 
+    [[nodiscard]]
+    glm::vec3 support(const glm::vec3 &dir, const glm::vec3 &pos, const glm::quat &orient,  float bias) const final;
+
     float m_radius{1};
 };
 
-inline bool sphereSphere( const SphereShape* sphereA, const SphereShape* sphereB, const glm::vec3& posA
-                          , const glm::vec3& posB, const glm::vec3& velA, const glm::vec3& velB, const float dt
-                          , glm::vec3& pointOnA, glm::vec3& pointOnB, float& timeOfImpact){
-    const auto relVelocity = velA - velB;
-
-    const auto startPointA = posA;
-    const auto endPointA = posA + relVelocity * dt;
-    const auto rayDir = endPointA - startPointA;
-
-    float t0 = 0;
-    float t1 = 0;
-
-    if(glm::dot(rayDir, rayDir) < 0.000001){
-        // Ray is too short, just check if already intersecting
-        auto ab = posB - posA;
-        float radius = sphereA->m_radius + sphereB->m_radius + 0.001f;
-        if(glm::dot(ab, ab) > radius * radius){
-            return false;
-        }
-    }else if (!raySphere(posA, rayDir, posB, sphereA->m_radius + sphereB->m_radius, t0, t1)){
-        return false;
+class BoxShape final : public Shape{
+public:
+    BoxShape(const std::vector<glm::vec3>& points){
+        build(points);
     }
 
-    // Change from [0, 1] range to [0, dt] range
-    t0 *= dt;
-    t1 *= dt;
-
-    // if the collision is only in the past, then there's not future collision this frame
-    if(t1 < 0.0f){
-        return false;
+    [[nodiscard]]
+    inline Type type() const final {
+        return Shape::Type::BOX;
     }
 
-    // Get the earliest positive time of impact;
-    timeOfImpact = (t0 < 0.0f) ? 0.0f : t0;
+     [[nodiscard]]
+     glm::mat3 inertiaTensor() const final;
 
-    // if the earliest collision is too far in the future, then there's no collision this frame
-    if(timeOfImpact > dt){
-        return false;
-    }
+    [[nodiscard]]
+    glm::vec3 centerOfMass() const final;
 
-    // Get the points on the respective points of collision and return true
-    auto newPosA = posA + velA * timeOfImpact;
-    auto newPosB = posB + velB * timeOfImpact;
-    auto ab = glm::normalize(newPosB - newPosA);
-    pointOnA = newPosA + ab * sphereA->m_radius;
-    pointOnB = newPosB - ab * sphereB->m_radius;
-    return true;
-}
+    [[nodiscard]]
+    Bounds bounds(const glm::vec3 &pos, const glm::quat &orient) const final;
+
+    [[nodiscard]]
+    Bounds bounds() const final;
+
+    void build(const std::vector<glm::vec3> &points) final;
+
+    [[nodiscard]]
+    glm::vec3 support(const glm::vec3 &dir, const glm::vec3 &pos, const glm::quat &orient, float bias) const final;
+
+    [[nodiscard]]
+    float fastLinearSpeed(const glm::vec3 &angularVelocity, const glm::vec3 &dir) const final;
+
+public:
+    Bounds m_bounds;
+    std::vector<glm::vec3> m_points;
+};

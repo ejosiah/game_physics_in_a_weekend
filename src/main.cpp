@@ -2,6 +2,8 @@
 
 #include <vulkan_util/ImGuiPlugin.hpp>
 #include "GameWorld.hpp"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_access.hpp>
 
 int main(){
     fs::current_path("../../resources");

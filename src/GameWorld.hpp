@@ -5,6 +5,7 @@
 #include <vulkan_util/SkyBox.hpp>
 #include "body.hpp"
 #include "contact.hpp"
+#include "collision.hpp"
 #include "objectbuilder.hpp"
 
 //struct Color{
