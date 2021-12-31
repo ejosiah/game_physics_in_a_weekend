@@ -2,6 +2,7 @@
 #include "signedVolume.hpp"
 #include <spdlog/spdlog.h>
 #include <vulkan_util/glm_format.h>
+#include <sstream>
 
 Point GJK::support(const Body *bodyA, const Body *bodyB, glm::vec3 dir, float bias) {
     dir = glm::normalize(dir);
@@ -453,6 +454,7 @@ EPA::expand(const Body *bodyA, const Body *bodyB, float bias, const std::array<P
         points.push_back(newPoint);
 
         // remove triangles that face this point
+        spdlog::info("newPoint: {}", newPoint.xyz);
         int numRemoved = removeTrianglesFacingPoint(newPoint.xyz, triangles, points);
         if(numRemoved == 0){
             break;
@@ -482,6 +484,45 @@ EPA::expand(const Body *bodyA, const Body *bodyB, float bias, const std::array<P
 
     // Get the projection of the origin on the closest triangle
     const auto idx = closestTriangle(triangles, points);
+    if(idx == -1){
+        std::stringstream iss;
+        iss << "BodyA:" << "\n";
+        iss << "\t" << "position: " << fmt::format("{}", bodyA->position) << "\n";
+        iss << "\t" << "orientation: " << fmt::format("{}", bodyA->orientation) << "\n";
+        iss << "\t" << "lVelocity: " << fmt::format("{}", bodyA->linearVelocity) << "\n";
+        iss << "\t" << "aVelocity: " << fmt::format("{}", bodyA->angularVelocity) << "\n";
+        iss << "\t" << "mass: " << fmt::format("{}", bodyA->invMass == 0 ? 0 : 1.0f/bodyA->invMass) << "\n";
+        iss << "\t" << "elasticity: " << bodyA->elasticity << "\n";
+        iss << "\t" << "friction: " << bodyA->friction << "\n";
+        iss << "\t" << "points: " << "\n";
+        auto cube = dynamic_cast<BoxShape*>(bodyA->shape.get());
+        for(auto& point : cube->m_points){
+            iss << "\t\t" << fmt::format("{}", point) << "\n";
+        }
+        iss << "\n\n";
+        iss << "BodyB:" << "\n";
+        iss << "\t" << "position: " << fmt::format("{}", bodyB->position) << "\n";
+        iss << "\t" << "orientation: " << fmt::format("{}", bodyB->orientation) << "\n";
+        iss << "\t" << "lVelocity: " << fmt::format("{}", bodyB->linearVelocity) << "\n";
+        iss << "\t" << "aVelocity: " << fmt::format("{}", bodyB->angularVelocity) << "\n";
+        iss << "\t" << "mass: " << fmt::format("{}", bodyB->invMass == 0 ? 0 : 1.0f/bodyB->invMass) << "\n";
+        iss << "\t" << "elasticity: " << bodyB->elasticity << "\n";
+        iss << "\t" << "friction: " << bodyB->friction << "\n";
+        iss << "\t" << "points: " << "\n";
+        cube = dynamic_cast<BoxShape*>(bodyB->shape.get());
+        for(auto& point : cube->m_points){
+            iss << "\t\t" << fmt::format("{}", point) << "\n";
+        }
+
+        iss << "\n";
+        iss << "simplex points:" << "\n";
+        for(auto point : simplexPoints){
+            iss << "\t" << fmt::format("pointA: {} pointB: {}, CSO: {}", point.pointA, point.pointB, point.xyz) << "\n";
+        }
+        iss << "\n";
+        iss << "bias: " << bias;
+        spdlog::info(iss.str());
+    }
     const auto& tri = triangles[idx];
     auto ptA_w = points[tri.a].xyz;
     auto ptB_w = points[tri.b].xyz;

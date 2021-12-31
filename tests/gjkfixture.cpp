@@ -120,3 +120,68 @@ TEST_F(GJKFixture, returnClosestPointBetweenToSpheres){
     ASSERT_NEAR(pointOnB.y, expectedPointOnB.y, 1E-3f);
     ASSERT_NEAR(pointOnB.z, expectedPointOnB.z, 1E-3f);
 }
+
+TEST_F(GJKFixture, EPAShouldCreateContactInfo){
+    auto bodyA =
+        builder()
+            .position(0, 0, 0)
+            .mass(0)
+            .elasticity(0.5)
+            .friction(0)
+            .shape(std::make_shared<BoxShape>(std::vector<glm::vec3>{
+                    {-50.000, -1.000, -25.000},
+                    {50.000, -1.000, -25.000},
+                    {-50.000, 0.000, -25.000},
+                    {-50.000, -1.000, 25.000},
+                    {50.000, 0.000, 25.000},
+                    {-50.000, 0.000, 25.000},
+                    {50.000, -1.000, 25.000},
+                    {50.000, 0.000, -25.000}
+            }))
+        .buildBody();
+
+    auto bodyB =
+        builder()
+            .position(1.630, 1.051, 0.057)
+            .orientation(0.999, 0.004, 0.029, -0.016)
+            .linearVelocity(0.660, -1.088, 0.169)
+            .angularVelocity(0.064, 0.053, 0.855)
+            .mass(1)
+            .elasticity(0.5)
+            .friction(0.5)
+            .shape(std::make_shared<BoxShape>(std::vector<glm::vec3>{
+                    {-1.000, -1.000, -1.000},
+                    {1.000, -1.000, -1.000},
+                    {-1.000, 1.000, -1.000},
+                    {-1.000, -1.000, 1.000},
+                    {1.000, 1.000, 1.000},
+                    {-1.000, 1.000, 1.000},
+                    {1.000, -1.000, 1.000},
+                    {1.000, 1.000, -1.000}
+            }))
+        .buildBody();
+
+    std::array<Point, 4> simplexPoints{};
+    simplexPoints[0].pointA = {-50.001, 0.000, 25.000};
+    simplexPoints[0].pointB = {2.653, 0.013, 0.992};
+    simplexPoints[0].xyz = {-52.654, -0.013, 24.009};
+
+    simplexPoints[1].pointA = {50.001, 0.000, 25.000};
+    simplexPoints[1].pointB = {2.655, 0.013, 0.992};
+    simplexPoints[1].xyz = {47.346, -0.013, 24.009};
+
+    simplexPoints[2].pointA = {50.001, 0.000, -25.000};
+    simplexPoints[2].pointB = {2.655, 0.013, 0.991};
+    simplexPoints[2].xyz = {47.346, -0.013, -25.991};
+
+    simplexPoints[3].pointA = {-50.001, 0.000, -25.000};
+    simplexPoints[3].pointB = {2.653, 0.013, 0.991};
+    simplexPoints[3].xyz = {-52.654, -0.013, -25.991};
+
+    auto bias = 0.001f;
+
+    glm::vec3 pointOnA, pointOnB;
+    auto dist = EPA::expand(&bodyA, &bodyB, bias, simplexPoints, pointOnA, pointOnB);
+
+    ASSERT_NE(dist, 0);
+}

@@ -52,13 +52,13 @@ struct Objects{
 
     void build(ObjectBuilder& builder, entt::registry& registry){
 //        builder
-//            .position(2, 0, 10)
+//            .position(2, 10, 0)
 //            .mass(1.0)
 //            .elasticity(0.5)
 //            .friction(0.5)
 //            .shape(std::make_shared<BoxShape>(boxUnit))
 //        .build();
-//
+
 //        builder
 //            .position(4, 5, 10)
 //            .shape(std::make_shared<BoxShape>(boxSmall))
@@ -68,38 +68,42 @@ struct Objects{
 //            .position(8, 8, 10)
 //            .shape(std::make_shared<BoxShape>(boxBeam))
 //        .build();
+//
+//        builder
+//            .position(0, 10, 0)
+//            .mass(1.0)
+//            .elasticity(0.5)
+//            .friction(0.5)
+//            .shape(std::make_shared<BoxShape>(boxUnit))
+//        .build();
 
         builder
-            .position(0, 10, 0)
+            .position(0.8, 10, 0)
             .mass(1.0)
             .elasticity(0.5)
             .friction(0.5)
             .shape(std::make_shared<BoxShape>(boxUnit))
         .build();
 
-        builder
-            .position(0.8, 10, 0)
-        .build();
-
-        auto boxA = boxUnit;
-        glm::mat4 xform = glm::translate(glm::mat4(1), {0.8, 10, 0});
-        for(auto& v : boxA){
-            v = (xform * glm::vec4(v, 1)).xyz();
-        }
-
-        auto boxB = boxUnit;
-        xform = glm::translate(glm::mat4(1), {0, 10, 0});
-        for(auto& v : boxB){
-            v = (xform * glm::vec4(v, 1)).xyz();
-        }
-
-        std::vector<glm::vec3> CSO;
-        for(auto& v1 : boxA){
-            for(auto& v2 : boxB){
-                auto v3 = v1 - v2;
-                CSO.push_back(v3);
-            }
-        }
+//        auto boxA = boxUnit;
+//        glm::mat4 xform = glm::translate(glm::mat4(1), {0.8, 10, 0});
+//        for(auto& v : boxA){
+//            v = (xform * glm::vec4(v, 1)).xyz();
+//        }
+//
+//        auto boxB = boxUnit;
+//        xform = glm::translate(glm::mat4(1), {0, 10, 0});
+//        for(auto& v : boxB){
+//            v = (xform * glm::vec4(v, 1)).xyz();
+//        }
+//
+//        std::vector<glm::vec3> CSO;
+//        for(auto& v1 : boxA){
+//            for(auto& v2 : boxB){
+//                auto v3 = v1 - v2;
+//                CSO.push_back(v3);
+//            }
+//        }
 //        auto CSOShape = std::make_shared<BoxShape>(CSO);
 //        builder
 //            .position(0, 0, 0)

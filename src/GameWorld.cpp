@@ -406,7 +406,7 @@ void GameWorld::updateTransforms() {
 void GameWorld::updateInstanceTransforms() {
     updateInstanceTransform<SphereTag>(sphereEntity);
     updateInstanceTransform<BoxTag>(cubeEntity);
-    updateInstanceTransform<Diamond>(diamondEntity);
+//    updateInstanceTransform<Diamond>(diamondEntity);
 }
 
 bool GameWorld::intersect(Body &bodyA, Body &bodyB, float dt, Contact& contact) {
@@ -607,9 +607,48 @@ void GameWorld::createSceneObjects() {
 
     sandBoxEntity =  SandBox().build(builder, registry);
 
-    diamondEntity = createEntity("diamond");
-    Diamond().build(device, render.pipeline, render.layout, diamondEntity, registry);
-//    Objects().build(builder, registry);
+//    diamondEntity = createEntity("diamond");
+//    Diamond().build(device, render.pipeline, render.layout, diamondEntity, registry);
+    Objects().build(builder, registry);
+
+//    auto bodyA =
+//            builder
+//                    .position(0, 0, 0)
+//                    .mass(0)
+//                    .elasticity(0.5)
+//                    .friction(0)
+//                    .shape(std::make_shared<BoxShape>(std::vector<glm::vec3>{
+//                            {-50.000, -1.000, -25.000},
+//                            {50.000, -1.000, -25.000},
+//                            {-50.000, 0.000, -25.000},
+//                            {-50.000, -1.000, 25.000},
+//                            {50.000, 0.000, 25.000},
+//                            {-50.000, 0.000, 25.000},
+//                            {50.000, -1.000, 25.000},
+//                            {50.000, 0.000, -25.000}
+//                    }))
+//                    .build();
+//
+//    auto bodyB =
+//            builder
+//                    .position(1.630, 1.051, 0.057)
+//                    .orientation(0.999, 0.004, 0.029, -0.016)
+//                    .linearVelocity(0.660, -1.088, 0.169)
+//                    .angularVelocity(0.064, 0.053, 0.855)
+//                    .mass(1)
+//                    .elasticity(0.5)
+//                    .friction(0.5)
+//                    .shape(std::make_shared<BoxShape>(std::vector<glm::vec3>{
+//                            {-1.000, -1.000, -1.000},
+//                            {1.000, -1.000, -1.000},
+//                            {-1.000, 1.000, -1.000},
+//                            {-1.000, -1.000, 1.000},
+//                            {1.000, 1.000, 1.000},
+//                            {-1.000, 1.000, 1.000},
+//                            {1.000, -1.000, 1.000},
+//                            {1.000, 1.000, -1.000}
+//                    }))
+//                    .build();
 
     auto view = registry.view<Body>();
     for(auto entity : view){

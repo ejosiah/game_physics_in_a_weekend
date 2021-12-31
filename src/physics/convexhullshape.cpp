@@ -5,11 +5,11 @@ Shape::Type ConvexHullShape::type() const {
 }
 
 glm::mat3 ConvexHullShape::inertiaTensor() const {
-    return glm::mat3();
+    return m_inertiaTensor;
 }
 
 glm::vec3 ConvexHullShape::centerOfMass() const {
-    return Shape::centerOfMass();
+    return m_centerOfMass;
 }
 
 Bounds ConvexHullShape::bounds(const glm::vec3 &pos, const glm::quat &orient) const {
@@ -37,7 +37,7 @@ Bounds ConvexHullShape::bounds(const glm::vec3 &pos, const glm::quat &orient) co
 }
 
 Bounds ConvexHullShape::bounds() const {
-    return Bounds();
+    return m_bounds;
 }
 
 std::vector<glm::vec3> ConvexHullShape::vertices() const {
@@ -68,7 +68,20 @@ void ConvexHullShape::build(const std::vector<glm::vec3> &points) {
 
 glm::vec3
 ConvexHullShape::support(const glm::vec3 &dir, const glm::vec3 &pos, const glm::quat &orient, float bias) const {
-    return glm::vec3();
+    auto rotation = glm::mat3(orient);
+    auto maxPoint = rotation * m_points[0] + pos;
+    auto maxDist = glm::dot(dir, maxPoint);
+    for(auto i = 1; i < m_points.size(); i++){
+        const auto pt = rotation * m_points[i] + pos;
+        const auto dist = glm::dot(dir, pt);
+        if(dist > maxDist){
+            maxDist = dist;
+            maxPoint = pt;
+        }
+    }
+    auto n = glm::normalize(dir);
+    n *= bias;
+    return maxPoint + n;
 }
 
 float ConvexHullShape::fastLinearSpeed(const glm::vec3 &angularVelocity, const glm::vec3 &dir) const {
