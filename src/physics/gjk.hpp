@@ -51,6 +51,6 @@ public:
 
     static bool doesIntersect(const Body* bodyA, const Body* bodyB, float bias, glm::vec3& pointOnA, glm::vec3& pointOnB);
 
-    static void closestPoint(const Body* bodyA, const Body* bodyB, glm::vec3& pointOnA, glm::vec3 pointOnB);
+    static void closestPoint(const Body* bodyA, const Body* bodyB, glm::vec3& pointOnA, glm::vec3& pointOnB);
 
 };

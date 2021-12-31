@@ -224,7 +224,7 @@ bool GJK::doesIntersect(const Body *bodyA, const Body *bodyB, float bias, glm::v
     return true;
 }
 
-void GJK::closestPoint(const Body *bodyA, const Body *bodyB, glm::vec3 &pointOnA, glm::vec3 pointOnB) {
+void GJK::closestPoint(const Body *bodyA, const Body *bodyB, glm::vec3 &pointOnA, glm::vec3& pointOnB) {
     const glm::vec3 origin{0};
     auto closestDist = 1E10f;
 
