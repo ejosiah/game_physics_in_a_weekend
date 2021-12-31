@@ -15,9 +15,9 @@ struct Contact{
     } LocalSpace;
 
     glm::vec3 normal;   //in world space
-    float separationDistance;   // positive when non-penetrating, negative when penetrating
-    float timeOfImpact;
+    float separationDistance{0};   // positive when non-penetrating, negative when penetrating
+    float timeOfImpact{0};
 
-    Body* bodyA;
-    Body* bodyB;
+    Body* bodyA{nullptr};
+    Body* bodyB{nullptr};
 };

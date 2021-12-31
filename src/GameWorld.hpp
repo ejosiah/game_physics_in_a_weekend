@@ -8,12 +8,6 @@
 #include "collision.hpp"
 #include "objectbuilder.hpp"
 
-//struct Color{
-//    glm::vec3 value;
-//};
-//
-//struct SkyBoxTag{};
-//struct SphereTag{};
 
 class GameWorld : public VulkanBaseApp{
 public:
@@ -25,6 +19,8 @@ protected:
     void initCamera();
 
     void createSphereEntity();
+
+    void createCubeEntity();
 
     void createSphereInstance(glm::vec3 color, float mass = 1.0f, float elasticity = 1.0f, float radius = 1.0f, const glm::vec3& center = {0, 0, 0});
 
@@ -62,6 +58,21 @@ protected:
 
     void updateInstanceTransforms();
 
+    template<typename Tag>
+    void updateInstanceTransform(Entity entity){
+        auto renderComp = entity.get<component::Render>();
+        auto instanceBuffer = reinterpret_cast<InstanceData*>(renderComp.vertexBuffers[1].map());
+
+        auto i = renderComp.instanceCount - 1;
+        auto view = registry.view<Tag, component::Transform>();
+        for(auto e : view){
+            auto& transform = view.get<component::Transform>(e);
+            instanceBuffer[i].transform = transform.value;
+            i--;
+        }
+        renderComp.vertexBuffers[1].unmap();
+    }
+
     void checkAppInputs() override;
 
     void cleanup() override;
@@ -97,6 +108,9 @@ protected:
     std::unique_ptr<CameraController> cameraController;
     SkyBox skyBox;
     Entity sphereEntity;
+    Entity cubeEntity;
+    Entity sandBoxEntity;
+    Entity diamondEntity;
     bool m_runPhysics{false};
     const glm::vec3 GRAVITY{0, -10, 0};
     std::vector<Body*> bodies;

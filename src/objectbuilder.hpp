@@ -5,18 +5,7 @@
 #include "body.hpp"
 #include <vulkan_util/Entity.hpp>
 #include <vulkan_util/components.h>
-
-struct InstanceData{
-    glm::mat4 transform;
-    glm::vec3 color;
-};
-
-struct Color{
-    glm::vec3 value;
-};
-
-struct SkyBoxTag{};
-struct SphereTag{};
+#include "tags.hpp"
 
 class ObjectBuilder{
 public:
@@ -26,15 +15,15 @@ public:
 
     ObjectBuilder& position(const glm::vec3& po);
 
-    ObjectBuilder& position(const float x, const float y, const float z);
+    ObjectBuilder& position(float x, float y, float z);
 
-    ObjectBuilder& orientation(const float w, const float x, const float y, const float z);
+    ObjectBuilder& orientation(float w, float x, float y, float z);
 
     ObjectBuilder& rotation(const glm::quat& qu);
 
-    ObjectBuilder& mass(const float ma);
+    ObjectBuilder& mass(float ma);
 
-    ObjectBuilder& elasticity(const float el);
+    ObjectBuilder& elasticity(float el);
 
     ObjectBuilder& shape(std::shared_ptr<Shape> sh);
 
@@ -42,17 +31,19 @@ public:
 
     ObjectBuilder& scale(const glm::vec3& sc);
 
-    ObjectBuilder& friction(const float fr);
+    ObjectBuilder& friction(float fr);
 
     ObjectBuilder& linearVelocity(const glm::vec3& lVel);
 
-    ObjectBuilder& linearVelocity(const float x, const float y, const float z);
+    ObjectBuilder& linearVelocity(float x, float y, float z);
 
     ObjectBuilder& angularVelocity(const glm::vec3& aVel);
 
-    ObjectBuilder& angularVelocity(const float x, const float y, const float z);
+    ObjectBuilder& angularVelocity(float x, float y, float z);
 
     Entity build();
+
+    Body buildBody();
 
 private:
     glm::vec3 m_color{1, 0, 0};

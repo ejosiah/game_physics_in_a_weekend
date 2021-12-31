@@ -40,8 +40,30 @@ Bounds ConvexHullShape::bounds() const {
     return Bounds();
 }
 
+std::vector<glm::vec3> ConvexHullShape::vertices() const {
+    return m_points;
+}
+
+std::vector<uint32_t> ConvexHullShape::indices() const {
+    std::vector<uint32_t> indices;
+    for(const auto& tri : m_hullTris){
+        indices.push_back(tri.a);
+        indices.push_back(tri.b);
+        indices.push_back(tri.c);
+    }
+    return indices;
+}
+
 void ConvexHullShape::build(const std::vector<glm::vec3> &points) {
-    Shape::build(points);
+    ConvexHullBuilder builder{points};
+    builder.build();
+    m_points = builder.m_hullPoints;
+    m_hullTris = builder.m_hullTris;
+    m_bounds.clear();
+    m_bounds.expand(m_points);
+    m_centerOfMass = builder.calculateCenterOfMass();
+    m_inertiaTensor = builder.calculateInertiaTensor(m_centerOfMass);
+
 }
 
 glm::vec3
@@ -58,5 +80,4 @@ float ConvexHullShape::fastLinearSpeed(const glm::vec3 &angularVelocity, const g
         maxSpeed = glm::max(speed, maxSpeed);
     }
     return maxSpeed;
-}
 }

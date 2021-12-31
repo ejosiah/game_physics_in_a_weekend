@@ -11,7 +11,7 @@
 class Shape{
 public:
     enum class Type : uint32_t {
-        SPHERE, BOX, CONVEX_HULL;
+        SPHERE, BOX, CONVEX_HULL
     };
 
     virtual Type type() const = 0;

@@ -7,6 +7,7 @@
 
 int main(){
     fs::current_path("../../resources");
+//    spdlog::set_level(spdlog::level::off);
     try{
         std::unique_ptr<Plugin> plugin = std::make_unique<ImGuiPlugin>();
         Settings settings;

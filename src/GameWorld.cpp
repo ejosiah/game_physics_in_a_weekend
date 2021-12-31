@@ -5,6 +5,10 @@
 #include "utility.hpp"
 #include <vulkan_util/ImGuiPlugin.hpp>
 #include <vulkan_util/random.h>
+#include "sandbox.hpp"
+#include "objects.hpp"
+#include "diamond.hpp"
+#include "gjk.hpp"
 
 GameWorld::GameWorld(const Settings& settings) : VulkanBaseApp("Game Physics In One Weekend", settings) {
     fileManager.addSearchPath("spv");
@@ -22,6 +26,7 @@ void GameWorld::initApp() {
     createRenderPipeline();
     createComputePipeline();
     createSphereEntity();
+    createCubeEntity();
 //    createSphereInstance({1, 1, 1}, 0.0f, 1.0f, 1000, {0, -1000, 0});
 //    createSphereInstance({1, 0, 0}, 0.0f, 1.0f, 1, {0, 1, 0});
     createSceneObjects();
@@ -284,6 +289,33 @@ void GameWorld::createSphereEntity() {
     pipelines.add({render.pipeline, render.layout});
 }
 
+void GameWorld::createCubeEntity() {{
+    cubeEntity = createEntity("cube");
+    cubeEntity.add<component::Render>();
+
+    auto cube = primitives::cube();
+
+    auto vertices = device.createDeviceLocalBuffer(cube.vertices.data(), BYTE_SIZE(cube.vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    device.setName<VK_OBJECT_TYPE_BUFFER>("cube_vertices", vertices.buffer);
+    auto indexes = device.createDeviceLocalBuffer(cube.indices.data(), BYTE_SIZE(cube.indices), VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+    device.setName<VK_OBJECT_TYPE_BUFFER>("cube_indices", indexes.buffer);
+    auto instances = device.createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(InstanceData) * 1000, "cube_xforms");
+
+    auto& renderComponent = cubeEntity.get<component::Render>();
+    renderComponent.instanceCount = 0;
+    renderComponent.indexCount = cube.indices.size();
+    renderComponent.vertexBuffers.push_back(vertices);
+    renderComponent.vertexBuffers.push_back(instances);
+    renderComponent.indexBuffer = indexes;
+
+    auto indexCount = cube.indices.size();
+    auto vertexCount = cube.vertices.size();
+    renderComponent.primitives.push_back(vkn::Primitive::indexed(indexCount, 0, vertexCount, 0));
+
+    auto& pipelines = cubeEntity.add<component::Pipelines>();
+    pipelines.add({render.pipeline, render.layout});
+}}
+
 void GameWorld::createSphereInstance(glm::vec3 color, float mass, float elasticity, float radius, const glm::vec3& center) {
 
     auto entity =
@@ -372,22 +404,15 @@ void GameWorld::updateTransforms() {
 }
 
 void GameWorld::updateInstanceTransforms() {
-    auto renderComp = sphereEntity.get<component::Render>();
-    auto instanceBuffer = reinterpret_cast<InstanceData*>(renderComp.vertexBuffers[1].map());
-
-    auto i = renderComp.instanceCount - 1;
-    auto view = registry.view<SphereTag, component::Transform>();
-    for(auto entity : view){
-        auto& transform = view.get<component::Transform>(entity);
-        instanceBuffer[i].transform = transform.value;
-        i--;
-    }
-    renderComp.vertexBuffers[1].unmap();
+    updateInstanceTransform<SphereTag>(sphereEntity);
+    updateInstanceTransform<BoxTag>(cubeEntity);
+    updateInstanceTransform<Diamond>(diamondEntity);
 }
 
 bool GameWorld::intersect(Body &bodyA, Body &bodyB, float dt, Contact& contact) {
     contact.bodyA = &bodyA;
     contact.bodyB = &bodyB;
+    contact.timeOfImpact = 0.0f;
 
     if(const auto sphereA = dynamic_cast<SphereShape*>(bodyA.shape.get())){
         if(const auto sphereB = dynamic_cast<SphereShape*>(bodyB.shape.get())){
@@ -397,7 +422,8 @@ bool GameWorld::intersect(Body &bodyA, Body &bodyB, float dt, Contact& contact) 
             auto velA = bodyA.linearVelocity;
             auto velB = bodyB.linearVelocity;
 
-            if(sphereSphere(sphereA, sphereB, posA, posB, velA, velB, dt, contact.worldSpace.pointOnA, contact.worldSpace.pointOnB, contact.timeOfImpact)){
+            if(sphereSphereDynamic(sphereA, sphereB, posA, posB, velA, velB, dt, contact.worldSpace.pointOnA,
+                                   contact.worldSpace.pointOnB, contact.timeOfImpact)){
                 // set bodies forward to get local space collision points;
                 bodyA.update(contact.timeOfImpact);
                 bodyB.update(contact.timeOfImpact);
@@ -419,6 +445,41 @@ bool GameWorld::intersect(Body &bodyA, Body &bodyB, float dt, Contact& contact) 
                 return true;
             }
         }
+    }else{
+        glm::vec3 pointOnA, pointOnB;
+        const auto bias = 0.001f;
+        if(GJK::doesIntersect(&bodyA, &bodyB, bias, pointOnA, pointOnB)){
+            // There was an intersection, so get the contact data
+            auto normal = glm::normalize(pointOnB - pointOnA);
+
+            pointOnA -= normal * bias;
+            pointOnB += normal * bias;
+
+            contact.normal = normal;
+
+            contact.worldSpace.pointOnA = pointOnA;
+            contact.worldSpace.pointOnB = pointOnB;
+
+            contact.LocalSpace.pointOnA = bodyA.worldSpaceToBodySpace(contact.worldSpace.pointOnA);
+            contact.LocalSpace.pointOnB = bodyB.worldSpaceToBodySpace(contact.worldSpace.pointOnB);
+
+            auto ab = bodyA.position - bodyB.position;
+            float r = glm::distance(pointOnA, pointOnB);
+            contact.separationDistance = -r;
+            return true;
+        }
+
+        // There was no collison, but we still want the contact data, so get it
+        GJK::closestPoint(&bodyA, &bodyB, pointOnA, pointOnB);
+        contact.worldSpace.pointOnA = pointOnA;
+        contact.worldSpace.pointOnB = pointOnB;
+
+        contact.LocalSpace.pointOnA = bodyA.worldSpaceToBodySpace(contact.worldSpace.pointOnA);
+        contact.LocalSpace.pointOnB = bodyB.worldSpaceToBodySpace(contact.worldSpace.pointOnB);
+
+        auto ab = bodyA.position - bodyB.position;
+        float r = glm::distance(pointOnA, pointOnB);
+        contact.separationDistance = -r;
     }
 
     return false;
@@ -512,21 +573,20 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
         }
     }
 
-
-//    if(ImGui::TreeNodeEx("Rigid Bodies", ImGuiTreeNodeFlags_DefaultOpen)) {
-//        for (auto i = 0; i < bodies.size(); i++) {
-//            auto body = bodies[i];
-//            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-//            if(ImGui::TreeNode((void *) (intptr_t) i, "Body %d", i)) {
-//                ImGui::Text("position: %s", fmt::format("{}", body->position).c_str());
-//                ImGui::Text("velocity (linear): %s", fmt::format("{}", body->linearVelocity).c_str());
-//                ImGui::Text("velocity (angular): %s", fmt::format("{}", body->angularVelocity).c_str());
-//                ImGui::Text("mass : %f kg", body->invMass == 0 ? 0 : 1.0/body->invMass);
-//                ImGui::TreePop();
-//            }
-//        }
-//        ImGui::TreePop();
-//    }
+    if(ImGui::TreeNodeEx("Rigid Bodies", ImGuiTreeNodeFlags_DefaultOpen)) {
+        for (auto i = 0; i < bodies.size(); i++) {
+            auto body = bodies[i];
+            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+            if(ImGui::TreeNode((void *) (intptr_t) i, "Body %d", i)) {
+                ImGui::Text("position: %s", fmt::format("{}", body->position).c_str());
+                ImGui::Text("velocity (linear): %s", fmt::format("{}", body->linearVelocity).c_str());
+                ImGui::Text("velocity (angular): %s", fmt::format("{}", body->angularVelocity).c_str());
+                ImGui::Text("mass : %f kg", body->invMass == 0 ? 0 : 1.0/body->invMass);
+                ImGui::TreePop();
+            }
+        }
+        ImGui::TreePop();
+    }
 
     if(ImGui::CollapsingHeader("Simulation Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("Objects: %d", simStates.numObjects);
@@ -542,46 +602,14 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
 }
 
 void GameWorld::createSceneObjects() {
-    auto smallSphere = std::make_shared<SphereShape>(0.5f);
-    auto bigSphere = std::make_shared<SphereShape>(80.5f);
-    auto builder = ObjectBuilder(sphereEntity, &registry);
 
-    // dynamic bodies
-    for(int x = 0; x < 6; x++){
-        for(int z = 0; z < 6; z++){
-            auto radius = smallSphere->m_radius;
-            auto xx = float(x - 1) * radius * 1.5f;
-            auto zz = float(z - 1) * radius * 1.5f;
-            builder
-                .color(randomColor())
-                .position(xx, 10.0f, zz)
-                .orientation(1, 0, 0, 0)
-                .linearVelocity(0, 0, 0)
-                .mass(1.0)
-                .elasticity(0.5)
-                .friction(0.5)
-                .shape(smallSphere)
-            .build();
-        }
-    }
-    // static bodies
-    for(int x = 0; x < 3; x++){
-        for(int z = 0; z < 3; z++){
-            auto radius = bigSphere->m_radius;
-            auto xx = float(x - 1) * radius * 0.25f;
-            auto zz = float(z - 1) * radius * 0.25f;
-            builder
-                .color({1, 1, 1})
-                .position(xx, -radius, zz)
-                .orientation(1, 0, 0, 0)
-                .linearVelocity(0, 0, 0)
-                .mass(0.0)
-                .elasticity(0.999)
-                .friction(0.5)
-                .shape(bigSphere)
-            .build();
-        }
-    }
+    auto builder = ObjectBuilder(cubeEntity, &registry);
+
+    sandBoxEntity =  SandBox().build(builder, registry);
+
+    diamondEntity = createEntity("diamond");
+    Diamond().build(device, render.pipeline, render.layout, diamondEntity, registry);
+//    Objects().build(builder, registry);
 
     auto view = registry.view<Body>();
     for(auto entity : view){

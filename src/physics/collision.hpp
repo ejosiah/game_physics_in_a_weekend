@@ -2,7 +2,21 @@
 
 #include "shape.hpp"
 
-inline bool sphereSphere( const SphereShape* sphereA, const SphereShape* sphereB, const glm::vec3& posA
+inline bool sphereSphereStatic(const SphereShape* sphereA, const SphereShape* sphereB, const glm::vec3& posA
+        , const glm::vec3& posB, const glm::vec3& velA, const glm::vec3& velB, const float dt
+        , glm::vec3& pointOnA, glm::vec3& pointOnB){
+
+    const auto ab = posB - posA;
+    const auto normal = glm::normalize(ab);
+    pointOnA = posA + normal * sphereA->m_radius;
+    pointOnB = posB + normal * sphereB->m_radius;
+
+    const auto radiusAB = sphereA->m_radius + sphereB->m_radius;
+
+    return glm::dot(ab, ab) <= (radiusAB * radiusAB);
+}
+
+inline bool sphereSphereDynamic(const SphereShape* sphereA, const SphereShape* sphereB, const glm::vec3& posA
         , const glm::vec3& posB, const glm::vec3& velA, const glm::vec3& velB, const float dt
         , glm::vec3& pointOnA, glm::vec3& pointOnB, float& timeOfImpact){
     const auto relVelocity = velA - velB;

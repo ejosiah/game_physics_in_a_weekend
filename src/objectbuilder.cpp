@@ -79,6 +79,11 @@ Entity ObjectBuilder::build() {
         m_scale = glm::vec3(sphere->m_radius);
         entity.add<SphereTag>();
     }
+
+    if(auto cube = dynamic_cast<BoxShape*>(m_shape.get())){
+        m_scale = glm::abs(cube->m_bounds.max - cube->m_bounds.min);
+        entity.add<BoxTag>();
+    }
     auto& render = m_baseEntity.get<component::Render>();
     if(m_name.empty()){
         auto baseName = m_baseEntity.get<component::Name>().value;
@@ -121,6 +126,20 @@ ObjectBuilder &ObjectBuilder::position(const float x, const float y, const float
     m_position = glm::vec3(x, y, z);
 
     return *this;
+}
+
+Body ObjectBuilder::buildBody() {
+    Body body;
+    body.position = m_position;
+    body.orientation = m_rotation;
+    body.invMass = m_mass <= 0 ? 0 : 1.0f/m_mass;
+    body.linearVelocity = m_linearVelocity;
+    body.angularVelocity = m_angularVelocity;
+    body.elasticity = m_elasticity;
+    body.friction = m_friction;
+    body.shape = m_shape;
+
+    return body;
 }
 
 

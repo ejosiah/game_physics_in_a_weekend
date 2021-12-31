@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.19)
 project(game_physics_in_one_weekend)
 
+enable_testing()
+
 find_program(GLSLC glslc REQUIRED)
 include(cmake/utilities.cmake)
 
@@ -25,11 +27,25 @@ conan_basic_setup()
 
 include_directories(src)
 include_directories(src/physics)
+include_directories(src/math)
 
 file(GLOB_RECURSE HPP_FILES ${CMAKE_CURRENT_LIST_DIR}/src/*.hpp)
 file(GLOB_RECURSE CPP_FILES ${CMAKE_CURRENT_LIST_DIR}/src/*.cpp)
+file(GLOB_RECURSE TEST_FILES ${CMAKE_CURRENT_LIST_DIR}/tests/*.*)
+file(GLOB_RECURSE GTEST_LIBS ${CONAN_LIB_DIRS_GTEST}/*.lib)
 
 message(STATUS "FILES: ${HPP_FILES}")
 
 add_executable(game_physics_in_one_weekend ${HPP_FILES} ${CPP_FILES})
 target_link_libraries(game_physics_in_one_weekend VulkanBase Vulkan::Vulkan ${CONAN_LIBS})
+
+include(GoogleTest)
+add_executable(game_physics_in_one_weekend_test ${HPP_FILES} ${TEST_FILES}
+        ${CMAKE_CURRENT_LIST_DIR}/src/physics/signedvolume.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/objectbuilder.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/physics/gjk.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/physics/shape.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/physics/bounds.cpp
+        )
+target_link_libraries(game_physics_in_one_weekend_test PRIVATE  VulkanBase Vulkan::Vulkan ${GTEST_LIBS} ${CONAN_LIBS})
+gtest_add_tests(TARGET game_physics_in_one_weekend_test)
