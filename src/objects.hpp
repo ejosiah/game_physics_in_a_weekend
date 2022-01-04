@@ -11,18 +11,20 @@
 #include <tuple>
 #include "math.hpp"
 
-struct Objects{
-    std::vector<glm::vec3> boxUnit = {
-            {-1, -1, -1},
-            { 1, -1, -1},
-            {-1, -1,  1},
-            { 1, -1,  1},
+std::vector<glm::vec3> boxUnit = {
+        {-1, -1, -1},
+        {-1, -1,  1},
+        {-1,  1,  1},
+        {-1,  1, -1},
 
-            {-1, 1, -1},
-            { 1, 1, -1},
-            {-1, 1,  1},
-            { 1, 1,  1}
-    };
+        {1,  1,  1},
+        {1,  1, -1},
+        {1, -1, -1},
+        {1, -1,  1}
+};
+
+struct Objects{
+
 
     static constexpr float t = 0.25f;
     std::vector<glm::vec3> boxSmall = {
@@ -78,7 +80,8 @@ struct Objects{
 //        .build();
 
         builder
-            .position(0.8, 10, 0)
+            .position(-10, 3, 0)
+            .linearVelocity(10, 0, 0)
             .mass(1.0)
             .elasticity(0.5)
             .friction(0.5)

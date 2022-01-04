@@ -7,6 +7,7 @@
 #include <glm/gtc/quaternion.hpp>
 #include "intersectiontest.hpp"
 #include "bounds.hpp"
+#include "math.hpp"
 
 class Shape{
 public:
@@ -105,3 +106,5 @@ public:
     Bounds m_bounds;
     std::vector<glm::vec3> m_points;
 };
+
+#include "convexhullshape.hpp"

@@ -6,8 +6,10 @@
 
 class ConvexHullShape final : public Shape{
 public:
-    explicit ConvexHullShape(const std::vector<glm::vec3>& points){
-        build(points);
+    explicit ConvexHullShape(const std::vector<glm::vec3>& points = {}){
+        if(!points.empty()) {
+            build(points);
+        }
     }
 
     [[nodiscard]]

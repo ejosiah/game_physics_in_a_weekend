@@ -52,20 +52,20 @@ Bounds BoxShape::bounds(const glm::vec3 &pos, const glm::quat &orient) const {
     std::array<glm::vec3, 8> corners{};
     const auto min = m_bounds.min;
     const auto max = m_bounds.max;
-    corners[0] = min;
-    corners[1] = glm::vec3(min.xy, max.z);
-    corners[2] = glm::vec3(min.x, max.y, min.z);
-    corners[3] = glm::vec3(max.x, min.yz);
+    corners[0] = glm::vec3(min.x, min.y, min.z);
+    corners[1] = glm::vec3(min.x, min.y, max.z);
+    corners[2] = glm::vec3(min.x, max.y, max.z);
+    corners[3] = glm::vec3(min.x, max.y, min.z);
 
-    corners[4] = max;
-    corners[5] = glm::vec3(max.xy, min.z);
-    corners[6] = glm::vec3(max.x, min.y, max.z);
-    corners[7] = glm::vec3(min.x, max.yz);
+    corners[4] = glm::vec3(max.x, max.y, max.z);
+    corners[5] = glm::vec3(max.x, max.y, min.z);
+    corners[6] = glm::vec3(max.x, min.y, min.z);
+    corners[7] = glm::vec3(max.x, min.y, max.z);
 
     Bounds cBounds{};
     auto rotate = glm::mat3(orient);
     for(auto& corner : corners){
-        corner = rotate * corner;
+        corner = rotate * corner + pos;
         cBounds.expand(corner);
     }
 
@@ -85,14 +85,14 @@ void BoxShape::build(const std::vector<glm::vec3> &points) {
     const auto max = m_bounds.max;
     m_points.clear();
     m_points.emplace_back(min.x, min.y, min.z);
-    m_points.emplace_back(max.x, min.y, min.z);
-    m_points.emplace_back(min.x, max.y, min.z);
     m_points.emplace_back(min.x, min.y, max.z);
+    m_points.emplace_back(min.x, max.y, max.z);
+    m_points.emplace_back(min.x, max.y, min.z);
 
     m_points.emplace_back(max.x, max.y, max.z);
-    m_points.emplace_back(min.x, max.y, max.z);
-    m_points.emplace_back(max.x, min.y, max.z);
     m_points.emplace_back(max.x, max.y, min.z);
+    m_points.emplace_back(max.x, min.y, min.z);
+    m_points.emplace_back(max.x, min.y, max.z);
 
     m_centerOfMass = (max + min) * 0.5f;
 }
@@ -115,7 +115,7 @@ glm::vec3 BoxShape::support(const glm::vec3 &dir, const glm::vec3 &pos, const gl
 }
 
 float BoxShape::fastLinearSpeed(const glm::vec3 &angularVelocity, const glm::vec3 &dir) const {
-    auto maxSpeed = std::numeric_limits<float>::min();
+    auto maxSpeed = 0.0f;
     for(const auto& point : m_points){
         auto r = point - m_centerOfMass;
         auto linearVelocity = glm::cross(angularVelocity, r);

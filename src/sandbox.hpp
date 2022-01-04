@@ -15,44 +15,45 @@ struct SandBox{
     static constexpr float h = 25;
 
     std::vector<glm::vec3> boxGround = {
-            {-w, 0,  h},
-            {w,  0, -h},
-            {-w, 0,  h},
-            {w,  0,  h},
-
             {-w, -1, -h},
-            { w, -1, -h},
             {-w, -1,  h},
-            { w, -1,  h}
+            {-w,  0,  h},
+            {-w,  0, -h},
+
+            {w,   0,  h},
+            {w,   0, -h},
+            {w,  -1, -h},
+            {w,  -1,  h}
     };
 
     std::vector<glm::vec3> boxWall0 = {
             {-1, 0, -h},
-            { 1, 0, -h},
             {-1, 0,  h},
-            { 1, 0,  h},
-
-            {-1, 5, -h},
-            { 1, 5, -h},
             {-1, 5,  h},
-            { 1, 5,  h}
+            {-1, 5, -h},
+
+            { 1, 5,  h},
+            { 1, 5, -h},
+            {-1, 0, -h},
+            { 1, 0,  h}
     };
 
     std::vector<glm::vec3> boxWall1 = {
             {-w, 0, -1},
-            { w, 0, -1},
             {-w, 0,  1},
-            { w, 0,  1},
-
-            {-w, 5, -1},
-            { w, 5, -1},
             {-w, 5,  1},
-            { w, 5,  1}
+            { w, 5,  -1},
+
+            { w, 5,  1},
+            { w, 5, -1},
+            { w, 0, -1},
+            { w, 0,  1}
     };
 
-     Entity build(ObjectBuilder& builder, entt::registry& registry){
+     Entity build(ObjectBuilder&& builder, entt::registry& registry){
          auto groundBoxEntity =
              builder
+                .position(0, 0, 0)
                 .mass(0)
                 .elasticity(0.5)
                 .friction(0)
@@ -63,6 +64,9 @@ struct SandBox{
         auto boxWall0RightEntity =
             builder
                 .position(50, 0, 0)
+                .mass(0)
+                .elasticity(0.5)
+                .friction(1)
                 .shape(boxWall0Shape)
             .build();
 
@@ -87,11 +91,11 @@ struct SandBox{
 
          auto sandBoxEntity = Entity{ registry};
 
-         groundBoxEntity.add<component::Parent>().entity = sandBoxEntity;
-         boxWall0RightEntity.add<component::Parent>().entity = sandBoxEntity;
-         boxWall0LeftEntity.add<component::Parent>().entity = sandBoxEntity;
-         boxWall1RightEntity.add<component::Parent>().entity = sandBoxEntity;
-         boxWall1LeftEntity.add<component::Parent>().entity = sandBoxEntity;
+//         groundBoxEntity.add<component::Parent>().entity = sandBoxEntity;
+//         boxWall0RightEntity.add<component::Parent>().entity = sandBoxEntity;
+//         boxWall0LeftEntity.add<component::Parent>().entity = sandBoxEntity;
+//         boxWall1RightEntity.add<component::Parent>().entity = sandBoxEntity;
+//         boxWall1LeftEntity.add<component::Parent>().entity = sandBoxEntity;
 
          return sandBoxEntity;
      }

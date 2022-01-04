@@ -6,11 +6,7 @@
 glm::vec2 SignedVolume::_1D(const glm::vec3 &s1, const glm::vec3 &s2) {
     auto ab = s2 - s1;
     auto ap = glm::vec3(0) - s1;
-    auto p0 = s1 + ab * glm::dot(ab, ap)/glm::dot(ab, ab);
-
-    if(glm::any(isnan(p0))){ // degenerate line
-        return glm::vec2(0);
-    }
+    auto p0 = nansafe(s1 + ab * glm::dot(ab, ap)/glm::dot(ab, ab));
 
     // choose the axis with the greatest difference / length
     int idx = 0;
@@ -52,11 +48,7 @@ glm::vec2 SignedVolume::_1D(const glm::vec3 &s1, const glm::vec3 &s2) {
 
 glm::vec3 SignedVolume::_2D(const glm::vec3 &s1, const glm::vec3 &s2, const glm::vec3 &s3) {
     auto normal = glm::cross((s2 - s1), (s3 - s1));
-    auto p0 = normal * glm::dot(s1, normal)/ glm::dot(normal, normal);
-
-    if(glm::any(isnan(p0))){ // degenerate triangle
-        return glm::vec3(0);
-    }
+    auto p0 = nansafe(normal * glm::dot(s1, normal)/ glm::dot(normal, normal));
 
     // Find the axis with the greatest projected area
     int idx = 0;
@@ -148,9 +140,6 @@ glm::vec4 SignedVolume::_3D(const glm::vec3 &s1, const glm::vec3 &s2, const glm:
 
     const float detM = C4[0] + C4[1] + C4[2] + C4[3];
 
-    if(detM == 0){ // degenerate tetrahedron
-        return glm::vec4(0);
-    }
 
     // if the barycentric coordinates put the origin inside the simplex, then return them;
     if(compareSigns(detM, C4[0]) && compareSigns(detM, C4[1]) && compareSigns(detM, C4[2]) && compareSigns(detM, C4[3])){
@@ -186,5 +175,8 @@ glm::vec4 SignedVolume::_3D(const glm::vec3 &s1, const glm::vec3 &s2, const glm:
 }
 
 bool SignedVolume::compareSigns(float a, float b){
+    if(a == 0 && b == 0){
+        return false;
+    }
     return glm::sign(a) == glm::sign(b);
 };

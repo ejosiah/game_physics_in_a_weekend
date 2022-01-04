@@ -22,9 +22,13 @@ protected:
 
     void createCubeEntity();
 
+    void createDiamondEntity();
+
     void createSphereInstance(glm::vec3 color, float mass = 1.0f, float elasticity = 1.0f, float radius = 1.0f, const glm::vec3& center = {0, 0, 0});
 
     void createSceneObjects();
+
+    std::shared_ptr<ConvexHullShape> diamondShape();
 
     void createDescriptorPool();
 
@@ -36,7 +40,11 @@ protected:
 
     void createComputePipeline();
 
+    bool conservativeAdvance(Body& bodyA, Body& bodyB, float dt, Contact& contact);
+
     bool intersect(Body& bodyA, Body& bodyB, float dt, Contact& contact);
+
+    bool intersect(Body& bodyA, Body& bodyB, Contact& contact);
 
     void onSwapChainDispose() override;
 

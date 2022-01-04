@@ -1,8 +1,9 @@
 #version 460
 
 layout(location = 0) in struct {
-    vec3 position;
+    vec4 position;
     vec3 normal;
+    vec3 localNormal;
     vec3 color;
     vec2 uv;
 } v_in;
@@ -41,7 +42,16 @@ void main(){
     vec3 N = normalize(v_in.normal);
     vec3 L = normalize(lightDir);
 
-    vec3 albedo = GetColorFromPositionAndNormal(v_in.position.xzy, v_in.normal.xzy);
+    vec3 albedo = vec3(0);
+    float dx = 0.25;
+    float dy = 0.25;
+    vec4 modelPos = v_in.position;
+    for(float y = 0.0; y < 1.0; y+= dy){
+        for(float x = 0.0; x < 1.0; x += dx){
+            vec4 samplePos = modelPos + dFdx(modelPos) * x + dFdy(modelPos) * y;
+            albedo += GetColorFromPositionAndNormal( samplePos.xzy, v_in.localNormal.xzy) * dx * dy;
+        }
+    }
     vec3 color = globalAmbience * albedo + max(0, dot(N, L)) * albedo;
 
     fragColor = vec4(color, 1);

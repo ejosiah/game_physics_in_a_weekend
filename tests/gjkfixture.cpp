@@ -12,6 +12,19 @@ protected:
     entt::registry m_registry;
     Entity m_cubeEntity;
 
+    std::vector<glm::vec3> m_boxUnit = {
+            {-1, -1, -1},
+            {-1, -1,  1},
+            {-1,  1,  1},
+            {-1,  1, -1},
+
+            {1, 1, 1},
+            {1, 1, -1},
+            {1, -1, -1},
+            {1, -1, 1}
+    };
+
+
     void SetUp() override {
         m_cubeEntity = createEntity("cube");
         m_builder = std::make_unique<ObjectBuilder>(m_cubeEntity, &m_registry);
@@ -143,9 +156,9 @@ TEST_F(GJKFixture, EPAShouldCreateContactInfo){
     auto bodyB =
         builder()
             .position(1.630, 1.051, 0.057)
-            .orientation(0.999, 0.004, 0.029, -0.016)
-            .linearVelocity(0.660, -1.088, 0.169)
-            .angularVelocity(0.064, 0.053, 0.855)
+            .orientation(0.862, -0.362, -0.033, 0.352)
+            .linearVelocity(0.000, -0.377, 0.000)
+            .angularVelocity(-1.297, -0.000, 1.556)
             .mass(1)
             .elasticity(0.5)
             .friction(0.5)
@@ -162,8 +175,8 @@ TEST_F(GJKFixture, EPAShouldCreateContactInfo){
         .buildBody();
 
     std::array<Point, 4> simplexPoints{};
-    simplexPoints[0].pointA = {-50.001, 0.000, 25.000};
-    simplexPoints[0].pointB = {2.653, 0.013, 0.992};
+    simplexPoints[0].pointA = {50.001, 0.000, -25.000};
+    simplexPoints[0].pointB = {0.946, 0.009, 0.111};
     simplexPoints[0].xyz = {-52.654, -0.013, 24.009};
 
     simplexPoints[1].pointA = {50.001, 0.000, 25.000};
@@ -184,4 +197,65 @@ TEST_F(GJKFixture, EPAShouldCreateContactInfo){
     auto dist = EPA::expand(&bodyA, &bodyB, bias, simplexPoints, pointOnA, pointOnB);
 
     ASSERT_NE(dist, 0);
+}
+
+TEST_F(GJKFixture, SphereAndCubeInCollisionShouldReturnTrue){
+    auto sphere =
+            builder()
+                .position(2, 10, 0)
+                .mass(1)
+                .elasticity(0.5)
+                .friction(0.5)
+                .shape(std::make_shared<SphereShape>(1))
+            .buildBody();
+
+    auto cube =
+        builder()
+            .position(0.8, 10, 0)
+            .mass(1.0)
+            .elasticity(0.5)
+            .friction(0.5)
+            .shape(std::make_shared<BoxShape>(m_boxUnit))
+        .buildBody();
+
+    glm::vec3 pointOnA, pointOnB;
+    auto collides = GJK::doesIntersect(&sphere, &cube, 0, pointOnA, pointOnB);
+
+    ASSERT_TRUE(collides);
+
+}
+
+TEST_F(GJKFixture, HasSamePointShouldReturnTrueForCloseEnoughPoints){
+    std::array<Point, 4> simplexPoints{};
+    simplexPoints[0].xyz = {1.459, 0.001, 0.539};
+    Point point{};
+    point.xyz = {1.461, 0.001, 0.539};
+
+    auto hasPoint = GJK::hasPoint(simplexPoints, point);
+    ASSERT_TRUE(hasPoint);
+}
+
+TEST_F(GJKFixture, TwoBoxesBearlyTouchingShouldNotBeInCollision){
+    auto boxA =
+        builder()
+            .position(-7.279, 6.927, -3.799)
+            .mass(1)
+            .elasticity(0.8)
+            .friction(1)
+            .shape(std::make_shared<BoxShape>(m_boxUnit))
+        .buildBody();
+
+    auto boxB =
+        builder()
+            .position(-7.208, 4.927, -2.707)
+            .mass(1)
+            .elasticity(0.8)
+            .friction(1)
+            .shape(std::make_shared<BoxShape>(m_boxUnit))
+        .buildBody();
+
+    glm::vec3 pointOnA, pointOnB;
+    auto intersects = GJK::doesIntersect(&boxA, &boxB, 0, pointOnA, pointOnB);
+
+    ASSERT_FALSE(intersects);
 }

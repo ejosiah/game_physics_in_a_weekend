@@ -5,10 +5,12 @@
 #include <sstream>
 
 Point GJK::support(const Body *bodyA, const Body *bodyB, glm::vec3 dir, float bias) {
+    auto tmp = dir;
     dir = glm::normalize(dir);
 
     if(glm::any(isnan(dir))){
-        return {};
+        spdlog::info("normalized dir {} is nan", tmp);
+        assert(false);
     }
 
     Point point{};
@@ -29,6 +31,10 @@ bool GJK::simplexSignedVolumes(Point *points, const int num, glm::vec3 &newDir, 
     const float epsilonf = 1E-8;
     lambdasOut = glm::vec4(0);
 
+    auto isZero = [](auto v){
+        return glm::all(glm::equal(v, decltype(v)(0)));
+    };
+
     bool doesIntersect = false;
     switch (num) {
         default:
@@ -38,7 +44,14 @@ bool GJK::simplexSignedVolumes(Point *points, const int num, glm::vec3 &newDir, 
             v += points[0].xyz * lambdas[0];
             v += points[1].xyz * lambdas[1];
             newDir = v * -1.0f;
-//            doesIntersect = (glm::dot(v, v) < epsilonf);
+            if(isZero(lambdas)){
+                for(int i = 0; i < num; i++){
+                    auto point = points[i];
+                    spdlog::info("cso: {}", point.xyz);
+                }
+                assert(!isZero(lambdas));
+            }
+            doesIntersect = (glm::dot(v, v) < epsilonf);
             lambdasOut[0] = lambdas[0];
             lambdasOut[1] = lambdas[1];
         } break;
@@ -49,6 +62,13 @@ bool GJK::simplexSignedVolumes(Point *points, const int num, glm::vec3 &newDir, 
             v += points[1].xyz * lambdas[1];
             v += points[2].xyz * lambdas[2];
             newDir = v * -1.0f;
+            if(isZero(lambdas)){
+                for(int i = 0; i < num; i++){
+                    auto point = points[i];
+                    spdlog::info("cso: {}", point.xyz);
+                }
+                assert(!isZero(lambdas));
+            }
             doesIntersect = (glm::dot(v, v) < epsilonf);
             lambdasOut[0] = lambdas[0];
             lambdasOut[1] = lambdas[1];
@@ -62,6 +82,13 @@ bool GJK::simplexSignedVolumes(Point *points, const int num, glm::vec3 &newDir, 
             v += points[2].xyz * lambdas[2];
             v += points[3].xyz * lambdas[3];
             newDir = v * -1.0f;
+            if(isZero(lambdas)){
+                for(int i = 0; i < num; i++){
+                    auto point = points[i];
+                    spdlog::info("cso: {}", point.xyz);
+                }
+                assert(!isZero(lambdas));
+            }
             doesIntersect = (glm::dot(v, v) < epsilonf);
             lambdasOut[0] = lambdas[0];
             lambdasOut[1] = lambdas[1];
@@ -130,8 +157,9 @@ bool GJK::doesIntersect(const Body *bodyA, const Body *bodyB, float bias, glm::v
     float closestDist = 1E10f;
     bool doesContainOrigin = false;
     auto newDir = -simplexPoints[0].xyz;
-
+    static int noIntersect = 0;
     do{
+        noIntersect++;
         // Get the new point to check on
         auto newPoint = support(bodyA, bodyB, newDir);
 
@@ -220,6 +248,7 @@ bool GJK::doesIntersect(const Body *bodyA, const Body *bodyB, float bias, glm::v
         pt.xyz = pt.pointA - pt.pointB;
     }
 
+//    spdlog::info("no intersect: {}", noIntersect);
     EPA::expand(bodyA, bodyB, bias, simplexPoints, pointOnA, pointOnB);
 
     return true;
@@ -406,6 +435,10 @@ EPA::expand(const Body *bodyA, const Body *bodyB, float bias, const std::array<P
     std::vector<Tri> triangles;
     std::vector<Edge> danglingEdges;
 
+//    for(auto& point : simplexPoints){
+//        spdlog::info("{}", point.xyz);
+//    }
+
     glm::vec3 center(0);
     for(int i = 0; i < 4; i++){
         points.push_back(simplexPoints[i]);
@@ -414,6 +447,7 @@ EPA::expand(const Body *bodyA, const Body *bodyB, float bias, const std::array<P
     center *= 0.25f;
 
     // build the triangles
+    bool inverted = false;
     for(int i = 0; i < 4; i++){
         int j = (i + 1) % 4;
         int k = (i + 2) % 4;
@@ -427,10 +461,15 @@ EPA::expand(const Body *bodyA, const Body *bodyB, float bias, const std::array<P
 
         // The unused point is always on the negative/inside of the triangle .. make sure the normal points away
         if(dist > 0.0f){
+            inverted = true;
             std::swap(tri.a, tri.b);
         }
 
         triangles.push_back(tri);
+    }
+
+    if(!inverted){
+        std::swap(triangles[0].a, triangles[0].b);
     }
 
     // expand the simplex to find the closest face of the CSO to the origin'
@@ -454,7 +493,7 @@ EPA::expand(const Body *bodyA, const Body *bodyB, float bias, const std::array<P
         points.push_back(newPoint);
 
         // remove triangles that face this point
-        spdlog::info("newPoint: {}", newPoint.xyz);
+//        spdlog::info("newPoint: {}", newPoint.xyz);
         int numRemoved = removeTrianglesFacingPoint(newPoint.xyz, triangles, points);
         if(numRemoved == 0){
             break;
@@ -496,8 +535,10 @@ EPA::expand(const Body *bodyA, const Body *bodyB, float bias, const std::array<P
         iss << "\t" << "friction: " << bodyA->friction << "\n";
         iss << "\t" << "points: " << "\n";
         auto cube = dynamic_cast<BoxShape*>(bodyA->shape.get());
-        for(auto& point : cube->m_points){
-            iss << "\t\t" << fmt::format("{}", point) << "\n";
+        if(cube) {
+            for (auto &point : cube->m_points) {
+                iss << "\t\t" << fmt::format("{}", point) << "\n";
+            }
         }
         iss << "\n\n";
         iss << "BodyB:" << "\n";
@@ -510,8 +551,10 @@ EPA::expand(const Body *bodyA, const Body *bodyB, float bias, const std::array<P
         iss << "\t" << "friction: " << bodyB->friction << "\n";
         iss << "\t" << "points: " << "\n";
         cube = dynamic_cast<BoxShape*>(bodyB->shape.get());
-        for(auto& point : cube->m_points){
-            iss << "\t\t" << fmt::format("{}", point) << "\n";
+        if(cube) {
+            for (auto &point : cube->m_points) {
+                iss << "\t\t" << fmt::format("{}", point) << "\n";
+            }
         }
 
         iss << "\n";

@@ -3,7 +3,7 @@
 #include "shape.hpp"
 
 inline bool sphereSphereStatic(const SphereShape* sphereA, const SphereShape* sphereB, const glm::vec3& posA
-        , const glm::vec3& posB, const glm::vec3& velA, const glm::vec3& velB, const float dt
+        , const glm::vec3& posB, const glm::vec3& velA, const glm::vec3& velB
         , glm::vec3& pointOnA, glm::vec3& pointOnB){
 
     const auto ab = posB - posA;

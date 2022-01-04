@@ -23,19 +23,26 @@ struct Diamond{
         diamondEntity.add<Diamond>();
         points.resize(7 * 8);
         std::array<glm::vec3, 8> pts{};
-        pts[0] = {0.1f, -1, 0.0f};
+        pts[0] = {0.1f, 0.0f, -1,};
         pts[1] = {1, 0, 0};
-        pts[2] = {1, 0.1f, 0};
-        pts[3] = {0.4f, 0.4f, 0};
+        pts[2] = {1, 0, 0.1f};
+        pts[3] = {0.4f, 0, 0.4f};
 
+        const auto pi = glm::pi<float>();
+        const glm::quat quatHalf{2.0f * pi * 0.125f * 0.5f, 0, 0, 1};
+        auto rotate = glm::mat3(quatHalf);
+        pts[4] = {0.8f, 0.0f, 0.3f};
+        pts[4] = rotate * pts[4];
+        pts[5] = rotate * pts[1];
+        pts[6] = rotate * pts[2];
+
+        const glm::quat quat{2.0f * pi * 0.125f, 0, 0, 1};
         int idx = 0;
         for(auto i = 0; i < 7; i++){
             points[idx] = pts[i];
             idx++;
         }
 
-        const auto pi = glm::pi<float>();
-        const glm::quat quat{2.0f * pi * 0.125f * 0.5f, 0, 1, 0};
         glm::quat quatAccum;
         for(auto i = 1; i < 8; i++){
             quatAccum *= quat;
@@ -44,6 +51,10 @@ struct Diamond{
                 points[idx] = glm::mat3(quatAccum) * pts[pt];
                 idx++;
             }
+        }
+
+        for(auto& point : points){
+            spdlog::info("point: {}", point);
         }
         
         auto hullShape = std::make_shared<ConvexHullShape>(points);

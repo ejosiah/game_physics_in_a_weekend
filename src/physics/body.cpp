@@ -85,9 +85,8 @@ void Body::update(float dt) {
 
     auto dAngle = angularVelocity * dt;
     glm::quat dq = glm::angleAxis(glm::length(dAngle), glm::normalize(dAngle));
-    if(glm::any(glm::isnan(dq))){
-        dq = {1, 0, 0, 0};
-    }
+    dq = nansafe(dq);
+
     orientation = dq * orientation;
     orientation = glm::normalize(orientation);
 

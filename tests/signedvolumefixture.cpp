@@ -84,6 +84,20 @@ TEST_F(SignedVolumeFixture, returnZerosOnDegenrateSimplex3D){
     auto lambdas = SignedVolume::_3D({1, -2, 0}, {1, 2, 0}, {1, 0, 0},  {1, 4, 0});
     ASSERT_FLOAT_EQ(lambdas.x, 0);
     ASSERT_FLOAT_EQ(lambdas.y, 0);
-    ASSERT_FLOAT_EQ(lambdas.z, 0);
+    ASSERT_FLOAT_EQ(lambdas.z, 1);
     ASSERT_FLOAT_EQ(lambdas.w, 0);
+}
+
+TEST_F(SignedVolumeFixture, anotherDegenerateSimplex3D){
+    auto lambdas = SignedVolume::_3D(
+              {50.618, -0.010, 25.044}
+            , {-52.208, -0.009, -25.070}
+            , {49.262, -0.030, -26.426}
+            , {-50.853, 0.011, -23.600});
+    
+    auto error = 1E-3;
+    ASSERT_NEAR(lambdas.x, 0.48629, error);
+    ASSERT_NEAR(lambdas.y, 0.00827329, error);
+    ASSERT_NEAR(lambdas.z, 0.0151818, error);
+    ASSERT_NEAR(lambdas.w, 0.490255, error);
 }

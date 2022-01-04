@@ -27,6 +27,7 @@ void GameWorld::initApp() {
     createComputePipeline();
     createSphereEntity();
     createCubeEntity();
+    createDiamondEntity();
 //    createSphereInstance({1, 1, 1}, 0.0f, 1.0f, 1000, {0, -1000, 0});
 //    createSphereInstance({1, 0, 0}, 0.0f, 1.0f, 1, {0, 1, 0});
     createSceneObjects();
@@ -87,6 +88,7 @@ void GameWorld::createRenderPipeline() {
                 .addVertexAttributeDescription(5, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(InstanceData, transform) + 16)
                 .addVertexAttributeDescription(6, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(InstanceData, transform) + 32)
                 .addVertexAttributeDescription(7, 1, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(InstanceData, transform) + 48)
+                .addVertexAttributeDescription(8, 1, VK_FORMAT_R32G32B32_SFLOAT, offsetOf(InstanceData, scale))
             .inputAssemblyState()
                 .triangles()
             .viewportState()
@@ -199,7 +201,6 @@ void GameWorld::fixedUpdate(float dt) {
         updateBodies(deltaTime * timeScale);
     }
     updateTransforms();
-    updateEntityTransforms();
     updateInstanceTransforms();
 }
 
@@ -289,7 +290,7 @@ void GameWorld::createSphereEntity() {
     pipelines.add({render.pipeline, render.layout});
 }
 
-void GameWorld::createCubeEntity() {{
+void GameWorld::createCubeEntity() {
     cubeEntity = createEntity("cube");
     cubeEntity.add<component::Render>();
 
@@ -314,7 +315,46 @@ void GameWorld::createCubeEntity() {{
 
     auto& pipelines = cubeEntity.add<component::Pipelines>();
     pipelines.add({render.pipeline, render.layout});
-}}
+}
+
+void GameWorld::createDiamondEntity() {
+    diamondEntity = createEntity("diamond");
+    VulkanDrawable drawable;
+    phong::VulkanDrawableInfo info{};
+    info.vertexUsage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    phong::load("models/diamond.obj", device, descriptorPool, drawable, info);
+
+
+    VulkanBuffer stagingBuffer = device.createStagingBuffer(drawable.vertexBuffer.size);
+    device.copy(drawable.vertexBuffer, stagingBuffer, stagingBuffer.size);
+
+    std::vector<glm::vec3> points;
+    auto vertices = reinterpret_cast<Vertex*>(stagingBuffer.map());
+    auto numPoints = stagingBuffer.size/sizeof(Vertex);
+    points.reserve(numPoints);
+    for(auto i = 0; i < numPoints; i++){
+        points.push_back(vertices[i].position.xyz());
+    }
+    stagingBuffer.unmap();
+    auto& shape = diamondEntity.add<ConvexHullShape>();
+    shape.build(points);
+
+    auto& renderComponent = diamondEntity.add<component::Render>();
+    renderComponent.instanceCount = 0;
+    renderComponent.indexCount = drawable.indexBuffer.size/sizeof(uint32_t);
+    renderComponent.vertexBuffers.push_back(drawable.vertexBuffer);
+    renderComponent.indexBuffer = drawable.indexBuffer;
+
+    auto instances = device.createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(InstanceData) * 1000, "diamond_xforms");
+    renderComponent.vertexBuffers.push_back(instances);
+
+    for(auto& mesh : drawable.meshes){
+        renderComponent.primitives.push_back(mesh);
+    }
+
+    auto& pipelines = diamondEntity.add<component::Pipelines>();
+    pipelines.add({render.pipeline, render.layout});
+}
 
 void GameWorld::createSphereInstance(glm::vec3 color, float mass, float elasticity, float radius, const glm::vec3& center) {
 
@@ -324,6 +364,7 @@ void GameWorld::createSphereInstance(glm::vec3 color, float mass, float elastici
             .color(color)
             .position(center)
             .mass(mass)
+            .friction(1)
             .elasticity(elasticity)
         .build();
     bodies.push_back(&entity.get<Body>());
@@ -353,7 +394,7 @@ void GameWorld::updateBodies(float dt) {
         if(bodyA.invMass == 0 && bodyB.invMass == 0) continue;
 
         Contact contact{};
-        if(intersect(bodyA, bodyB, dt, contact)){
+        if(intersect(bodyA, bodyB, contact)){
             contacts.push_back(contact);
         }
     }
@@ -391,22 +432,24 @@ void GameWorld::updateBodies(float dt) {
 }
 
 void GameWorld::updateTransforms() {
-    auto view = registry.view<Body, component::Position, component::Rotation>();
+    auto view = registry.view<const Body, const Offset, const component::Scale, component::Transform>();
 
     for(auto entity : view){
-        auto& body = view.get<Body>(entity);
-//        spdlog::info("body[velocity: {}, position: {}", body.linearVelocity, body.position);
-        auto& position = view.get<component::Position>(entity);
-        auto& rotation = view.get<component::Rotation>(entity);
-        position.value = body.position;
-        rotation.value = body.orientation;
+        const auto& body = view.get<const Body>(entity);
+        const auto& offset = view.get<const Offset>(entity);
+        auto translate = glm::translate(glm::mat4(1), body.position + offset.value);
+        auto rotate = glm::mat4(body.orientation);
+        auto scale = glm::scale(glm::mat4(1), view.get<const component::Scale>(entity).value);
+
+        auto& transform = view.get<component::Transform>(entity);
+        transform.value = translate * rotate * scale;
     }
 }
 
 void GameWorld::updateInstanceTransforms() {
     updateInstanceTransform<SphereTag>(sphereEntity);
     updateInstanceTransform<BoxTag>(cubeEntity);
-//    updateInstanceTransform<Diamond>(diamondEntity);
+    updateInstanceTransform<Diamond>(diamondEntity);
 }
 
 bool GameWorld::intersect(Body &bodyA, Body &bodyB, float dt, Contact& contact) {
@@ -414,36 +457,72 @@ bool GameWorld::intersect(Body &bodyA, Body &bodyB, float dt, Contact& contact) 
     contact.bodyB = &bodyB;
     contact.timeOfImpact = 0.0f;
 
-    if(const auto sphereA = dynamic_cast<SphereShape*>(bodyA.shape.get())){
-        if(const auto sphereB = dynamic_cast<SphereShape*>(bodyB.shape.get())){
-            auto posA = bodyA.position;
-            auto posB = bodyB.position;
+    const auto sphereB = dynamic_cast<SphereShape*>(bodyB.shape.get());
+    const auto sphereA = dynamic_cast<SphereShape*>(bodyA.shape.get());
+    if(sphereA && sphereB){
+        auto posA = bodyA.position;
+        auto posB = bodyB.position;
 
-            auto velA = bodyA.linearVelocity;
-            auto velB = bodyB.linearVelocity;
+        auto velA = bodyA.linearVelocity;
+        auto velB = bodyB.linearVelocity;
 
-            if(sphereSphereDynamic(sphereA, sphereB, posA, posB, velA, velB, dt, contact.worldSpace.pointOnA,
-                                   contact.worldSpace.pointOnB, contact.timeOfImpact)){
-                // set bodies forward to get local space collision points;
-                bodyA.update(contact.timeOfImpact);
-                bodyB.update(contact.timeOfImpact);
+        if(sphereSphereDynamic(sphereA, sphereB, posA, posB, velA, velB, dt, contact.worldSpace.pointOnA,
+                               contact.worldSpace.pointOnB, contact.timeOfImpact)){
+            // set bodies forward to get local space collision points;
+            bodyA.update(contact.timeOfImpact);
+            bodyB.update(contact.timeOfImpact);
 
-                // convert world space contact to local space;
-                contact.LocalSpace.pointOnA = bodyA.worldSpaceToBodySpace(contact.worldSpace.pointOnA);
-                contact.LocalSpace.pointOnB = bodyB.worldSpaceToBodySpace(contact.worldSpace.pointOnB);
+            // convert world space contact to local space;
+            contact.LocalSpace.pointOnA = bodyA.worldSpaceToBodySpace(contact.worldSpace.pointOnA);
+            contact.LocalSpace.pointOnB = bodyB.worldSpaceToBodySpace(contact.worldSpace.pointOnB);
 
-                contact.normal = glm::normalize(bodyA.position - bodyB.position);
+            contact.normal = glm::normalize(bodyA.position - bodyB.position);
 
-                // unwind time step;
-                bodyA.update(-contact.timeOfImpact);
-                bodyB.update(-contact.timeOfImpact);
+            // unwind time step;
+            bodyA.update(-contact.timeOfImpact);
+            bodyB.update(-contact.timeOfImpact);
 
-                // calculate the separation distance
-                auto ab = bodyB.position - bodyA.position;
-                float r = glm::length(ab) - (sphereA->m_radius + sphereB->m_radius);
-                contact.separationDistance = r;
-                return true;
-            }
+            // calculate the separation distance
+            auto ab = bodyB.position - bodyA.position;
+            float r = glm::length(ab) - (sphereA->m_radius + sphereB->m_radius);
+            contact.separationDistance = r;
+            return true;
+        }
+    }else{
+        auto res = conservativeAdvance(bodyA, bodyB, dt, contact);
+        return res;
+    }
+
+    return false;
+}
+bool GameWorld::intersect(Body &bodyA, Body &bodyB, Contact& contact) {
+    contact.bodyA = &bodyA;
+    contact.bodyB = &bodyB;
+    contact.timeOfImpact = 0.0f;
+
+    const auto sphereB = dynamic_cast<SphereShape*>(bodyB.shape.get());
+    const auto sphereA = dynamic_cast<SphereShape*>(bodyA.shape.get());
+    if(sphereA && sphereB){
+        auto posA = bodyA.position;
+        auto posB = bodyB.position;
+
+        auto velA = bodyA.linearVelocity;
+        auto velB = bodyB.linearVelocity;
+
+        if(sphereSphereStatic(sphereA, sphereB, posA, posB, velA, velB, contact.worldSpace.pointOnA,
+                               contact.worldSpace.pointOnB)){
+
+            // convert world space contact to local space;
+            contact.LocalSpace.pointOnA = bodyA.worldSpaceToBodySpace(contact.worldSpace.pointOnA);
+            contact.LocalSpace.pointOnB = bodyB.worldSpaceToBodySpace(contact.worldSpace.pointOnB);
+
+            contact.normal = glm::normalize(bodyA.position - bodyB.position);
+
+            // calculate the separation distance
+            auto ab = bodyB.position - bodyA.position;
+            float r = glm::length(ab) - (sphereA->m_radius + sphereB->m_radius);
+            contact.separationDistance = r;
+            return true;
         }
     }else{
         glm::vec3 pointOnA, pointOnB;
@@ -477,9 +556,9 @@ bool GameWorld::intersect(Body &bodyA, Body &bodyB, float dt, Contact& contact) 
         contact.LocalSpace.pointOnA = bodyA.worldSpaceToBodySpace(contact.worldSpace.pointOnA);
         contact.LocalSpace.pointOnB = bodyB.worldSpaceToBodySpace(contact.worldSpace.pointOnB);
 
-        auto ab = bodyA.position - bodyB.position;
+        auto ab = bodyB.position - bodyA.position;
         float r = glm::distance(pointOnA, pointOnB);
-        contact.separationDistance = -r;
+        contact.separationDistance = r;
     }
 
     return false;
@@ -603,52 +682,24 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
 
 void GameWorld::createSceneObjects() {
 
-    auto builder = ObjectBuilder(cubeEntity, &registry);
+    auto diamondBuilder = ObjectBuilder(diamondEntity, &registry);
+    diamondBuilder
+        .position(10, 3, 0)
+        .linearVelocity(-10, 0, 0)
+        .mass(1.0)
+        .elasticity(0.5)
+        .friction(0.5)
+        .shape(diamondShape())
+    .build().add<Diamond>();
 
-    sandBoxEntity =  SandBox().build(builder, registry);
+//    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
+//    Objects().build(cubeBuilder, registry);
+
+    sandBoxEntity =  SandBox().build(ObjectBuilder(cubeEntity, &registry), registry);
 
 //    diamondEntity = createEntity("diamond");
 //    Diamond().build(device, render.pipeline, render.layout, diamondEntity, registry);
-    Objects().build(builder, registry);
 
-//    auto bodyA =
-//            builder
-//                    .position(0, 0, 0)
-//                    .mass(0)
-//                    .elasticity(0.5)
-//                    .friction(0)
-//                    .shape(std::make_shared<BoxShape>(std::vector<glm::vec3>{
-//                            {-50.000, -1.000, -25.000},
-//                            {50.000, -1.000, -25.000},
-//                            {-50.000, 0.000, -25.000},
-//                            {-50.000, -1.000, 25.000},
-//                            {50.000, 0.000, 25.000},
-//                            {-50.000, 0.000, 25.000},
-//                            {50.000, -1.000, 25.000},
-//                            {50.000, 0.000, -25.000}
-//                    }))
-//                    .build();
-//
-//    auto bodyB =
-//            builder
-//                    .position(1.630, 1.051, 0.057)
-//                    .orientation(0.999, 0.004, 0.029, -0.016)
-//                    .linearVelocity(0.660, -1.088, 0.169)
-//                    .angularVelocity(0.064, 0.053, 0.855)
-//                    .mass(1)
-//                    .elasticity(0.5)
-//                    .friction(0.5)
-//                    .shape(std::make_shared<BoxShape>(std::vector<glm::vec3>{
-//                            {-1.000, -1.000, -1.000},
-//                            {1.000, -1.000, -1.000},
-//                            {-1.000, 1.000, -1.000},
-//                            {-1.000, -1.000, 1.000},
-//                            {1.000, 1.000, 1.000},
-//                            {-1.000, 1.000, 1.000},
-//                            {1.000, -1.000, 1.000},
-//                            {1.000, 1.000, -1.000}
-//                    }))
-//                    .build();
 
     auto view = registry.view<Body>();
     for(auto entity : view){
@@ -657,4 +708,65 @@ void GameWorld::createSceneObjects() {
     }
 
     simStates.numObjects = bodies.size();
+}
+
+bool GameWorld::conservativeAdvance(Body &bodyA, Body &bodyB, float dt, Contact &contact) {
+    contact.bodyA = &bodyA;
+    contact.bodyB = &bodyB;
+
+    auto toi = 0.0f;
+    auto numIterations = 0;
+    static constexpr int maxIterations = 10;
+    // Advance the positions of the bodies until they touch or there's not time left
+    while(dt > 0.0f ){
+        if(contact.separationDistance == -23){
+            spdlog::info("invalid dt");
+        }
+        auto didIntersect = intersect(bodyA, bodyB, contact);
+        if(didIntersect){
+            contact.timeOfImpact = toi;
+            bodyA.update(-toi);
+            bodyB.update(-toi);
+            return true;
+        }
+
+        numIterations++;
+        if(numIterations > maxIterations){
+            break;
+        }
+
+        // Get the vector from the closest point on A to the closest point on B
+        auto ab = contact.worldSpace.pointOnB - contact.worldSpace.pointOnA;
+        ab = nansafe(glm::normalize(ab));
+
+        auto relVelocity = bodyA.linearVelocity - bodyB.linearVelocity;
+        auto orthoSpeed = glm::dot(relVelocity, ab);
+
+        // Add to the orthoSpeed the maximum angular speeds of the relative shapes
+        auto angularSpeedA = bodyA.shape->fastLinearSpeed(bodyA.angularVelocity, ab);
+        auto angularSpeedB = bodyB.shape->fastLinearSpeed(bodyB.angularVelocity, ab);
+        orthoSpeed += angularSpeedA + angularSpeedB;
+        if(orthoSpeed <= 0){
+            break;
+        }
+        auto timeToGo = contact.separationDistance / orthoSpeed;
+//        spdlog::info("speed: {}, sd: {}, timeToGo: {}", orthoSpeed, contact.separationDistance, timeToGo);
+
+        if(timeToGo > dt){
+            break;
+        }
+        dt -= timeToGo;
+        toi += timeToGo;
+        bodyA.update(timeToGo);
+        bodyB.update(timeToGo);
+    }
+    // unwind the clock
+    bodyA.update(-toi);
+    bodyB.update(-toi);
+    return false;
+}
+
+std::shared_ptr<ConvexHullShape> GameWorld::diamondShape() {
+    auto& shape = diamondEntity.get<ConvexHullShape>();
+    return std::shared_ptr<ConvexHullShape>( &shape, [](auto* ){});
 }

@@ -75,6 +75,7 @@ Entity ObjectBuilder::build() {
     assert(m_registry &&  entt::entity(m_baseEntity) != entt::null);
     Entity entity{ *m_registry };
 
+
     if(auto sphere = dynamic_cast<SphereShape*>(m_shape.get())){
         m_scale = glm::vec3(sphere->m_radius);
         entity.add<SphereTag>();
@@ -82,8 +83,10 @@ Entity ObjectBuilder::build() {
 
     if(auto cube = dynamic_cast<BoxShape*>(m_shape.get())){
         m_scale = glm::abs(cube->m_bounds.max - cube->m_bounds.min);
+        m_offset = (cube->m_bounds.min + cube->m_bounds.max) * 0.5f;
         entity.add<BoxTag>();
     }
+
     auto& render = m_baseEntity.get<component::Render>();
     if(m_name.empty()){
         auto baseName = m_baseEntity.get<component::Name>().value;
@@ -94,8 +97,9 @@ Entity ObjectBuilder::build() {
     entity.add<component::Position>().value = m_position;
     entity.add<component::Scale>().value = m_scale;
     entity.add<component::Rotation>().value = m_rotation;
+    entity.add<Offset>().value = m_offset;
     entity.add<component::Transform>().value =
-            glm::translate(glm::mat4(1), m_position) * glm::mat4(m_rotation) * glm::scale(glm::mat4(1), m_scale);
+            glm::translate(glm::mat4(1), m_position + m_offset) * glm::mat4(m_rotation) * glm::scale(glm::mat4(1), m_scale);
 
     auto& body = entity.add<Body>();
     body.position = m_position;
@@ -111,7 +115,10 @@ Entity ObjectBuilder::build() {
     auto instances = reinterpret_cast<InstanceData*>(render.vertexBuffers[1].map());
     instances[render.instanceCount].transform = entity.get<component::Transform>().value;
     instances[render.instanceCount].color = m_color;
+    instances[render.instanceCount].scale = m_scale;
     render.vertexBuffers[1].unmap();
+
+
     render.instanceCount++;
 
     return entity;

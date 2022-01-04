@@ -49,6 +49,7 @@ private:
     glm::vec3 m_color{1, 0, 0};
     glm::vec3 m_position{0};
     glm::vec3 m_scale{1};
+    glm::vec3 m_offset{0};
     glm::quat m_rotation{1, 0, 0, 0};
     glm::vec3 m_linearVelocity{0};
     glm::vec3 m_angularVelocity{0};
