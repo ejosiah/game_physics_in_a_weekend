@@ -56,7 +56,7 @@ struct SandBox{
                 .position(0, 0, 0)
                 .mass(0)
                 .elasticity(0.5)
-                .friction(0)
+                .friction(1)
                 .shape(std::make_shared<BoxShape>(boxGround))
             .build();
 

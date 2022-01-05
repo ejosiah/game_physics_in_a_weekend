@@ -80,8 +80,9 @@ struct Objects{
 //        .build();
 
         builder
-            .position(-10, 3, 0)
-            .linearVelocity(10, 0, 0)
+            .position(0.8, 10, 0)
+            .linearVelocity(0, 0, 0)
+            .angularVelocity(0, 0, 10)
             .mass(1.0)
             .elasticity(0.5)
             .friction(0.5)

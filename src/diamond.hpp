@@ -16,47 +16,67 @@
 #include "objectbuilder.hpp"
 
 struct Diamond{
-    std::vector<glm::vec3> points;
+    std::vector<glm::vec3> points{
+            {0.1, -1, 0},
+            {1, 0, 0},
+            {1, 0.1, 0},
+            {0.4, 0.4, 0},
+            {0.739104, 0.3, 0.306147},
+            {0.92388, 0, 0.382683},
+            {0.92388, 0.1, 0.382683},
+            {0.0707107, -1, 0.0707107},
+            {0.707107, 0, 0.707107},
+            {0.707107, 0.1, 0.707107},
+            {0.282843, 0.4, 0.282843},
+            {0.306147, 0.3, 0.739104},
+            {0.382683, 0, 0.92388},
+            {0.382683, 0.1, 0.92388},
+            {-1.11759e-08, -1, 0.1},
+            {-1.49012e-07, 0, 1},
+            {-1.49012e-07, 0.1, 1},
+            {-4.47035e-08, 0.4, 0.4},
+            {-0.306147, 0.3, 0.739104},
+            {-0.382684, 0, 0.92388},
+            {-0.382684, 0.1, 0.92388},
+            {-0.0707107, -1, 0.0707107},
+            {-0.707107, 0, 0.707107},
+            {-0.707107, 0.1, 0.707107},
+            {-0.282843, 0.4, 0.282843},
+            {-0.739104, 0.3, 0.306147},
+            {-0.92388, 0, 0.382683},
+            {-0.92388, 0.1, 0.382683},
+            {-0.1, -1, -2.98023e-08},
+            {-1, 0, -2.98023e-07},
+            {-1, 0.1, -2.98023e-07},
+            {-0.4, 0.4, -1.19209e-07},
+            {-0.739104, 0.3, -0.306147},
+            {-0.923879, 0, -0.382684},
+            {-0.923879, 0.1, -0.382684},
+            {-0.0707107, -1, -0.0707107},
+            {-0.707106, 0, -0.707107},
+            {-0.707106, 0.1, -0.707107},
+            {-0.282843, 0.4, -0.282843},
+            {-0.306146, 0.3, -0.739104},
+            {-0.382683, 0, -0.92388},
+            {-0.382683, 0.1, -0.92388},
+            {4.84288e-08, -1, -0.1},
+            {5.06639e-07, 0, -1},
+            {5.06639e-07, 0.1, -1},
+            {1.93715e-07, 0.4, -0.4},
+            {0.306147, 0.3, -0.739103},
+            {0.382684, 0, -0.923879},
+            {0.382684, 0.1, -0.923879},
+            {0.0707107, -1, -0.0707106},
+            {0.707107, 0, -0.707106},
+            {0.707107, 0.1, -0.707106},
+            {0.282843, 0.4, -0.282843},
+            {0.739104, 0.3, -0.306146},
+            {0.92388, 0, -0.382683},
+            {0.92388, 0.1, -0.382683}
+    };
     std::vector<uint32_t> indices;
 
     Entity build(VulkanDevice& device, VkPipeline pipeline, VkPipelineLayout layout, Entity diamondEntity, entt::registry& registry){
-        diamondEntity.add<Diamond>();
-        points.resize(7 * 8);
-        std::array<glm::vec3, 8> pts{};
-        pts[0] = {0.1f, 0.0f, -1,};
-        pts[1] = {1, 0, 0};
-        pts[2] = {1, 0, 0.1f};
-        pts[3] = {0.4f, 0, 0.4f};
-
-        const auto pi = glm::pi<float>();
-        const glm::quat quatHalf{2.0f * pi * 0.125f * 0.5f, 0, 0, 1};
-        auto rotate = glm::mat3(quatHalf);
-        pts[4] = {0.8f, 0.0f, 0.3f};
-        pts[4] = rotate * pts[4];
-        pts[5] = rotate * pts[1];
-        pts[6] = rotate * pts[2];
-
-        const glm::quat quat{2.0f * pi * 0.125f, 0, 0, 1};
-        int idx = 0;
-        for(auto i = 0; i < 7; i++){
-            points[idx] = pts[i];
-            idx++;
-        }
-
-        glm::quat quatAccum;
-        for(auto i = 1; i < 8; i++){
-            quatAccum *= quat;
-            quatAccum = glm::normalize(quatAccum);
-            for (auto pt = 0; pt < 7; pt++) {
-                points[idx] = glm::mat3(quatAccum) * pts[pt];
-                idx++;
-            }
-        }
-
-        for(auto& point : points){
-            spdlog::info("point: {}", point);
-        }
-        
         auto hullShape = std::make_shared<ConvexHullShape>(points);
         auto hullVertices = hullShape->vertices();
         std::vector<Vertex> vertices;
@@ -104,13 +124,16 @@ struct Diamond{
         auto& pipelines = diamondEntity.add<component::Pipelines>();
         pipelines.add({pipeline, layout});
 
-        return
+        auto entity =
             ObjectBuilder{ diamondEntity, &registry}
-                .position(0, 10, 0)
+                .position(-10, 3, 0)
+                .angularVelocity(0, 0, 10)
                 .mass(1)
                 .elasticity(1)
                 .friction(0.5)
                 .shape(hullShape)
             .build();
+        entity.add<Diamond>();
+        return entity;
     }
 };

@@ -248,23 +248,23 @@ ConvexHullBuilder::calculateInertiaTensor(const glm::vec3& centerOfMass) {
     for(auto x = bounds.min.x; x < bounds.max.x; x += d.x){
         for(auto y = bounds.min.y; y < bounds.max.y; y += d.y){
             for(auto z = bounds.min.z; z < bounds.max.z; z += d.z){
-                glm::vec3 point(x, y, z);
-                if(isExternal(m_hullPoints, m_hullTris, point)){
+                glm::vec3 pt(x, y, z);
+                if(isExternal(m_hullPoints, m_hullTris, pt)){
                     continue;
                 }
-                point -= centerOfMass;
+                pt -= centerOfMass;
 
-                tensor[0][0] += glm::dot(point.yz(), point.yz());
-                tensor[1][1] += glm::dot(point.zx(), point.zx());
-                tensor[2][2] += glm::dot(point.xy(), point.xy());
+                tensor[0][0] += glm::dot(pt.yz(), pt.yz());
+                tensor[1][1] += glm::dot(pt.zx(), pt.zx());
+                tensor[2][2] += glm::dot(pt.xy(), pt.xy());
 
-                tensor[1][0] += -1.0f * point.x * point.y;
-                tensor[2][0] += -1.0f * point.x * point.z;
-                tensor[2][1] += -1.0f * point.y * point.z;
+                tensor[1][0] += -1.0f * pt.x * pt.y;
+                tensor[2][0] += -1.0f * pt.x * pt.z;
+                tensor[2][1] += -1.0f * pt.y * pt.z;
 
-                tensor[0][1] += -1.0f * point.x * point.y;
-                tensor[0][2] += -1.0f * point.x * point.z;
-                tensor[1][2] += -1.0f * point.y * point.z;
+                tensor[0][1] += -1.0f * pt.x * pt.y;
+                tensor[0][2] += -1.0f * pt.x * pt.z;
+                tensor[1][2] += -1.0f * pt.y * pt.z;
                 sampleCount++;
             }
         }

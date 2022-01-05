@@ -9,7 +9,6 @@ Point GJK::support(const Body *bodyA, const Body *bodyB, glm::vec3 dir, float bi
     dir = glm::normalize(dir);
 
     if(glm::any(isnan(dir))){
-        spdlog::info("normalized dir {} is nan", tmp);
         assert(false);
     }
 
@@ -47,7 +46,6 @@ bool GJK::simplexSignedVolumes(Point *points, const int num, glm::vec3 &newDir, 
             if(isZero(lambdas)){
                 for(int i = 0; i < num; i++){
                     auto point = points[i];
-                    spdlog::info("cso: {}", point.xyz);
                 }
                 assert(!isZero(lambdas));
             }
@@ -85,7 +83,6 @@ bool GJK::simplexSignedVolumes(Point *points, const int num, glm::vec3 &newDir, 
             if(isZero(lambdas)){
                 for(int i = 0; i < num; i++){
                     auto point = points[i];
-                    spdlog::info("cso: {}", point.xyz);
                 }
                 assert(!isZero(lambdas));
             }
@@ -435,10 +432,6 @@ EPA::expand(const Body *bodyA, const Body *bodyB, float bias, const std::array<P
     std::vector<Tri> triangles;
     std::vector<Edge> danglingEdges;
 
-//    for(auto& point : simplexPoints){
-//        spdlog::info("{}", point.xyz);
-//    }
-
     glm::vec3 center(0);
     for(int i = 0; i < 4; i++){
         points.push_back(simplexPoints[i]);
@@ -523,49 +516,6 @@ EPA::expand(const Body *bodyA, const Body *bodyB, float bias, const std::array<P
 
     // Get the projection of the origin on the closest triangle
     const auto idx = closestTriangle(triangles, points);
-    if(idx == -1){
-        std::stringstream iss;
-        iss << "BodyA:" << "\n";
-        iss << "\t" << "position: " << fmt::format("{}", bodyA->position) << "\n";
-        iss << "\t" << "orientation: " << fmt::format("{}", bodyA->orientation) << "\n";
-        iss << "\t" << "lVelocity: " << fmt::format("{}", bodyA->linearVelocity) << "\n";
-        iss << "\t" << "aVelocity: " << fmt::format("{}", bodyA->angularVelocity) << "\n";
-        iss << "\t" << "mass: " << fmt::format("{}", bodyA->invMass == 0 ? 0 : 1.0f/bodyA->invMass) << "\n";
-        iss << "\t" << "elasticity: " << bodyA->elasticity << "\n";
-        iss << "\t" << "friction: " << bodyA->friction << "\n";
-        iss << "\t" << "points: " << "\n";
-        auto cube = dynamic_cast<BoxShape*>(bodyA->shape.get());
-        if(cube) {
-            for (auto &point : cube->m_points) {
-                iss << "\t\t" << fmt::format("{}", point) << "\n";
-            }
-        }
-        iss << "\n\n";
-        iss << "BodyB:" << "\n";
-        iss << "\t" << "position: " << fmt::format("{}", bodyB->position) << "\n";
-        iss << "\t" << "orientation: " << fmt::format("{}", bodyB->orientation) << "\n";
-        iss << "\t" << "lVelocity: " << fmt::format("{}", bodyB->linearVelocity) << "\n";
-        iss << "\t" << "aVelocity: " << fmt::format("{}", bodyB->angularVelocity) << "\n";
-        iss << "\t" << "mass: " << fmt::format("{}", bodyB->invMass == 0 ? 0 : 1.0f/bodyB->invMass) << "\n";
-        iss << "\t" << "elasticity: " << bodyB->elasticity << "\n";
-        iss << "\t" << "friction: " << bodyB->friction << "\n";
-        iss << "\t" << "points: " << "\n";
-        cube = dynamic_cast<BoxShape*>(bodyB->shape.get());
-        if(cube) {
-            for (auto &point : cube->m_points) {
-                iss << "\t\t" << fmt::format("{}", point) << "\n";
-            }
-        }
-
-        iss << "\n";
-        iss << "simplex points:" << "\n";
-        for(auto point : simplexPoints){
-            iss << "\t" << fmt::format("pointA: {} pointB: {}, CSO: {}", point.pointA, point.pointB, point.xyz) << "\n";
-        }
-        iss << "\n";
-        iss << "bias: " << bias;
-        spdlog::info(iss.str());
-    }
     const auto& tri = triangles[idx];
     auto ptA_w = points[tri.a].xyz;
     auto ptB_w = points[tri.b].xyz;

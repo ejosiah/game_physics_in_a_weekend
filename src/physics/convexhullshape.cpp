@@ -1,4 +1,6 @@
 #include "convexhullshape.hpp"
+#include <spdlog/spdlog.h>
+#include <vulkan_util/glm_format.h>
 
 Shape::Type ConvexHullShape::type() const {
     return Type::CONVEX_HULL;
@@ -29,7 +31,7 @@ Bounds ConvexHullShape::bounds(const glm::vec3 &pos, const glm::quat &orient) co
     Bounds cBounds{};
     auto rotate = glm::mat3(orient);
     for(auto& corner : corners){
-        corner = rotate * corner;
+        corner = rotate * corner + pos;
         cBounds.expand(corner);
     }
 
@@ -63,7 +65,6 @@ void ConvexHullShape::build(const std::vector<glm::vec3> &points) {
     m_bounds.expand(m_points);
     m_centerOfMass = builder.calculateCenterOfMass();
     m_inertiaTensor = builder.calculateInertiaTensor(m_centerOfMass);
-
 }
 
 glm::vec3

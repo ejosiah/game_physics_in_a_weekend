@@ -1,10 +1,12 @@
 #include "body.hpp"
 #include "utility.hpp"
+#include <spdlog/spdlog.h>
+
 
 glm::vec3 Body::centerOfMassWorldSpace() const {
     auto centerOfMass = shape->centerOfMass();
-    auto wCenterOfMass = glm::mat4(orientation) * glm::vec4(centerOfMass, 1);
-    auto pos = position + wCenterOfMass.xyz();
+    auto wCenterOfMass = glm::mat3(orientation) * centerOfMass;
+    auto pos = position + wCenterOfMass;
     return pos;
 }
 
@@ -74,6 +76,7 @@ void Body::applyImpulse(const glm::vec3& impulsePoint, const glm::vec3 &impulse)
 void Body::update(float dt) {
     position += linearVelocity * dt;
 
+
     auto com = centerOfMassWorldSpace();
     auto comToPosition = position - com;
 
@@ -81,7 +84,7 @@ void Body::update(float dt) {
     auto tensor = orient * shape->inertiaTensor() * glm::transpose(orient);
 
     auto alpha = glm::inverse(tensor) * glm::cross(angularVelocity, tensor * angularVelocity);
-    angularVelocity += alpha;
+    angularVelocity += alpha * dt;
 
     auto dAngle = angularVelocity * dt;
     glm::quat dq = glm::angleAxis(glm::length(dAngle), glm::normalize(dAngle));
@@ -90,7 +93,7 @@ void Body::update(float dt) {
     orientation = dq * orientation;
     orientation = glm::normalize(orientation);
 
-    position = com + glm::mat3(orientation) * comToPosition;
+    position = com + glm::mat3(dq) * comToPosition;
 }
 
 bool Body::hasInfiniteMass() const {

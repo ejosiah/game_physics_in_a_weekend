@@ -68,7 +68,7 @@ protected:
 
     template<typename Tag>
     void updateInstanceTransform(Entity entity){
-        auto renderComp = entity.get<component::Render>();
+        auto& renderComp = entity.get<component::Render>();
         auto instanceBuffer = reinterpret_cast<InstanceData*>(renderComp.vertexBuffers[1].map());
 
         auto i = renderComp.instanceCount - 1;

@@ -329,28 +329,72 @@ void GameWorld::createDiamondEntity() {
     device.copy(drawable.vertexBuffer, stagingBuffer, stagingBuffer.size);
 
     std::vector<glm::vec3> points;
-    auto vertices = reinterpret_cast<Vertex*>(stagingBuffer.map());
+    auto vertices0 = reinterpret_cast<Vertex*>(stagingBuffer.map());
     auto numPoints = stagingBuffer.size/sizeof(Vertex);
     points.reserve(numPoints);
     for(auto i = 0; i < numPoints; i++){
-        points.push_back(vertices[i].position.xyz());
+        points.push_back(vertices0[i].position.xyz());
     }
     stagingBuffer.unmap();
     auto& shape = diamondEntity.add<ConvexHullShape>();
     shape.build(points);
 
-    auto& renderComponent = diamondEntity.add<component::Render>();
-    renderComponent.instanceCount = 0;
-    renderComponent.indexCount = drawable.indexBuffer.size/sizeof(uint32_t);
-    renderComponent.vertexBuffers.push_back(drawable.vertexBuffer);
-    renderComponent.indexBuffer = drawable.indexBuffer;
-
-    auto instances = device.createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(InstanceData) * 1000, "diamond_xforms");
-    renderComponent.vertexBuffers.push_back(instances);
-
-    for(auto& mesh : drawable.meshes){
-        renderComponent.primitives.push_back(mesh);
+    auto hullShape = &shape;
+    auto hullVertices = hullShape->vertices();
+    std::vector<Vertex> vertices;
+    for(const auto& point : hullVertices){
+        Vertex vertex{};
+        vertex.position = glm::vec4(point, 1);
+        vertices.push_back(vertex);
     }
+
+    auto indices = hullShape->indices();
+
+    for(int i = 0; i < indices.size()/3; i+= 3){
+        auto& a = vertices[indices[i]];
+        auto& b = vertices[indices[i + 1]];
+        auto& c = vertices[indices[i + 2]];
+
+        auto ab = b.position.xyz() - a.position.xyz();
+        auto ac = c.position.xyz() - a.position.xyz();
+
+        auto n = glm::normalize(glm::cross(ab, ac));
+        a.normal = n;
+        b.normal = n;
+        c.normal = n;
+    }
+
+    diamondEntity.add<component::Render>();
+
+    auto vertexBuffer = device.createDeviceLocalBuffer(vertices.data(), BYTE_SIZE(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+    device.setName<VK_OBJECT_TYPE_BUFFER>("diamond_vertices", vertexBuffer.buffer);
+    auto indexBuffer = device.createDeviceLocalBuffer(indices.data(), BYTE_SIZE(indices), VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+    device.setName<VK_OBJECT_TYPE_BUFFER>("diamond_indices", indexBuffer.buffer);
+    auto instanceBuffer = device.createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(InstanceData) * 1000, "diamond_xforms");
+
+    auto& renderComponent = diamondEntity.get<component::Render>();
+    renderComponent.instanceCount = 0;
+    renderComponent.indexCount = indices.size();
+    renderComponent.vertexBuffers.push_back(vertexBuffer);
+    renderComponent.vertexBuffers.push_back(instanceBuffer);
+    renderComponent.indexBuffer = indexBuffer;
+
+    auto indexCount = indices.size();
+    auto vertexCount = vertices.size();
+    renderComponent.primitives.push_back(vkn::Primitive::indexed(indexCount, 0, vertexCount, 0));
+
+//    auto& renderComponent = diamondEntity.add<component::Render>();
+//    renderComponent.instanceCount = 0;
+//    renderComponent.indexCount = drawable.indexBuffer.size/sizeof(uint32_t);
+//    renderComponent.vertexBuffers.push_back(drawable.vertexBuffer);
+//    renderComponent.indexBuffer = drawable.indexBuffer;
+//
+//    auto instances = device.createBuffer(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU, sizeof(InstanceData) * 1000, "diamond_xforms");
+//    renderComponent.vertexBuffers.push_back(instances);
+//
+//    for(auto& mesh : drawable.meshes){
+//        renderComponent.primitives.push_back(mesh);
+//    }
 
     auto& pipelines = diamondEntity.add<component::Pipelines>();
     pipelines.add({render.pipeline, render.layout});
@@ -394,7 +438,7 @@ void GameWorld::updateBodies(float dt) {
         if(bodyA.invMass == 0 && bodyB.invMass == 0) continue;
 
         Contact contact{};
-        if(intersect(bodyA, bodyB, contact)){
+        if(intersect(bodyA, bodyB, dt, contact)){
             contacts.push_back(contact);
         }
     }
@@ -652,20 +696,20 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
         }
     }
 
-    if(ImGui::TreeNodeEx("Rigid Bodies", ImGuiTreeNodeFlags_DefaultOpen)) {
-        for (auto i = 0; i < bodies.size(); i++) {
-            auto body = bodies[i];
-            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-            if(ImGui::TreeNode((void *) (intptr_t) i, "Body %d", i)) {
-                ImGui::Text("position: %s", fmt::format("{}", body->position).c_str());
-                ImGui::Text("velocity (linear): %s", fmt::format("{}", body->linearVelocity).c_str());
-                ImGui::Text("velocity (angular): %s", fmt::format("{}", body->angularVelocity).c_str());
-                ImGui::Text("mass : %f kg", body->invMass == 0 ? 0 : 1.0/body->invMass);
-                ImGui::TreePop();
-            }
-        }
-        ImGui::TreePop();
-    }
+//    if(ImGui::TreeNodeEx("Rigid Bodies", ImGuiTreeNodeFlags_DefaultOpen)) {
+//        for (auto i = 0; i < bodies.size(); i++) {
+//            auto body = bodies[i];
+//            ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+//            if(ImGui::TreeNode((void *) (intptr_t) i, "Body %d", i)) {
+//                ImGui::Text("position: %s", fmt::format("{}", body->position).c_str());
+//                ImGui::Text("velocity (linear): %s", fmt::format("{}", body->linearVelocity).c_str());
+//                ImGui::Text("velocity (angular): %s", fmt::format("{}", body->angularVelocity).c_str());
+//                ImGui::Text("mass : %f kg", body->invMass == 0 ? 0 : 1.0/body->invMass);
+//                ImGui::TreePop();
+//            }
+//        }
+//        ImGui::TreePop();
+//    }
 
     if(ImGui::CollapsingHeader("Simulation Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
         ImGui::Text("Objects: %d", simStates.numObjects);
@@ -682,10 +726,21 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
 
 void GameWorld::createSceneObjects() {
 
+    auto sphereBuilder = ObjectBuilder(sphereEntity, &registry);
+    sphereBuilder
+        .position(10, 3, 0)
+        .linearVelocity(-100, 0, 0)
+        .mass(1)
+        .elasticity(0.5)
+        .friction(0.5)
+        .shape(std::make_shared<SphereShape>(0.5f))
+    .build();
+
     auto diamondBuilder = ObjectBuilder(diamondEntity, &registry);
     diamondBuilder
-        .position(10, 3, 0)
-        .linearVelocity(-10, 0, 0)
+        .position(-10, 3, 0)
+        .linearVelocity(100, 0, 0)
+        .angularVelocity(0, 0, 10)
         .mass(1.0)
         .elasticity(0.5)
         .friction(0.5)
@@ -719,9 +774,6 @@ bool GameWorld::conservativeAdvance(Body &bodyA, Body &bodyB, float dt, Contact 
     static constexpr int maxIterations = 10;
     // Advance the positions of the bodies until they touch or there's not time left
     while(dt > 0.0f ){
-        if(contact.separationDistance == -23){
-            spdlog::info("invalid dt");
-        }
         auto didIntersect = intersect(bodyA, bodyB, contact);
         if(didIntersect){
             contact.timeOfImpact = toi;
@@ -732,7 +784,7 @@ bool GameWorld::conservativeAdvance(Body &bodyA, Body &bodyB, float dt, Contact 
 
         numIterations++;
         if(numIterations > maxIterations){
-            break;
+           break;
         }
 
         // Get the vector from the closest point on A to the closest point on B
