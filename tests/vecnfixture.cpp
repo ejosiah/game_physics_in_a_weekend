@@ -10,7 +10,7 @@ protected:
 };
 
 TEST_F(VecNFixture, InitializeVecNToSingleValue){
-    vec<10> vector(5.0f);
+    vec<10> vector{5.0f};
     for(int i = 0; i < 10; i++){
         ASSERT_EQ(vector[i], 5.0f);
     }

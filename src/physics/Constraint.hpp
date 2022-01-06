@@ -38,6 +38,9 @@ public:
 
     void solve() override;
 
+    void postSolve() override;
+
 private:
     mat1x12 m_Jacobian;
+    vec1 m_cachedLambda{1};
 };

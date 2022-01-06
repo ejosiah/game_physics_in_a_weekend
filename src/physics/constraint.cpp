@@ -75,6 +75,10 @@ void ConstraintDistance::preSolve(const float dt) {
     m_Jacobian[0][10] = J4.y;
     m_Jacobian[0][11] = J4.z;
 
+    // apply warm starting from last frame
+    const auto impulses = m_Jacobian.transpose() * m_cachedLambda;
+    applyImpulses(impulses);
+
 }
 
 void ConstraintDistance::solve() {
@@ -92,4 +96,19 @@ void ConstraintDistance::solve() {
     const auto impulses = jacobianTranspose * lambdaN;
 
     applyImpulses(impulses);
+    m_cachedLambda += lambdaN;
+}
+
+void ConstraintDistance::postSolve() {
+    if( m_cachedLambda[0] * 0.0f != m_cachedLambda[0] * 0.0f){
+        m_cachedLambda[0] = 0.0f;
+    }
+
+    static constexpr float limit = 1e5f;
+    if(m_cachedLambda[0] > limit){
+        m_cachedLambda[0] = limit;
+    }
+    if(m_cachedLambda[0] < -limit){
+        m_cachedLambda[0] = -limit;
+    }
 }

@@ -30,11 +30,15 @@ struct vec{
     }
 
     constexpr vec(std::initializer_list<float> values){
-        assert(values.size() == N);
-        auto itr = values.begin();
-        for(int i = 0; i < N; i++){
-            data[i] = *itr;
-            std::advance(itr, 1);
+        assert(values.size() == 1 || values.size() == N);
+        if(values.size() == 1){
+            std::fill_n(data.begin(), N, *values.begin());
+        }else {
+            auto itr = values.begin();
+            for (int i = 0; i < N; i++) {
+                data[i] = *itr;
+                std::advance(itr, 1);
+            }
         }
     }
 

@@ -455,8 +455,11 @@ void GameWorld::updateBodies(float dt) {
         constraint->preSolve(dt);
     }
 
-    for(auto& constraint : m_constraints){
-        constraint->solve();
+    static constexpr int maxIters = 5;
+    for(auto iters = 0; iters < maxIters && !m_constraints.empty(); iters++){
+        for(auto& constraint : m_constraints){
+            constraint->solve();
+        }
     }
 
     for(auto& constraint : m_constraints){
@@ -738,54 +741,45 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
 
 void GameWorld::createSceneObjects() {
 
-//    auto sphereBuilder = ObjectBuilder(sphereEntity, &registry);
-//    sphereBuilder
-//        .position(10, 3, 0)
-//        .linearVelocity(-100, 0, 0)
-//        .mass(1)
-//        .elasticity(0.5)
-//        .friction(0.5)
-//        .shape(std::make_shared<SphereShape>(0.5f))
-//    .build();
-//
-//    auto diamondBuilder = ObjectBuilder(diamondEntity, &registry);
-//    diamondBuilder
-//        .position(-10, 3, 0)
-//        .linearVelocity(100, 0, 0)
-//        .angularVelocity(0, 0, 10)
-//        .mass(1.0)
-//        .elasticity(0.5)
-//        .friction(0.5)
-//        .shape(diamondShape())
-//    .build().add<Diamond>();
-
     auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
 
-    auto entityA =
-        cubeBuilder
-            .position(0, 5.0, 0)
-            .shape(std::make_shared<BoxShape>(g_boxSmall))
-            .mass(0)
-            .elasticity(1.0f)
-        .build();
+    static constexpr int numJoints = 5;
+    Entity entityA;
+    for(auto i = 0; i < numJoints; i++) {
 
-    auto entityB =
-        cubeBuilder
-            .position(1, 5, 0)
-            .mass(1)
-        .build();
+        if(i == 0){
+            entityA =
+                cubeBuilder
+                    .position(0, static_cast<float>(numJoints) + 3.0f, 5.0)
+                    .shape(std::make_shared<BoxShape>(g_boxSmall))
+                    .mass(1)
+                    .elasticity(1.0f)
+                .build();
+        }
 
-    auto& bodyA = entityA.get<Body>();
-    auto& bodyB = entityB.get<Body>();
+        auto &bodyA = entityA.get<Body>();
+        const auto jointWorldSpaceAnchor = bodyA.position;
+        std::unique_ptr<Constraint> joint = std::make_unique<ConstraintDistance>();
+        joint->m_bodyA = &bodyA;
+        joint->m_anchorA = joint->m_bodyA->worldSpaceToBodySpace(jointWorldSpaceAnchor);
 
-    const auto jointWorldSpaceAnchor = bodyA.position;
-    std::unique_ptr<Constraint> joint = std::make_unique<ConstraintDistance>();
-    joint->m_bodyA = &bodyA;
-    joint->m_anchorA = joint->m_bodyA->worldSpaceToBodySpace(jointWorldSpaceAnchor);
 
-    joint->m_bodyB = &bodyB;
-    joint->m_anchorB = joint->m_bodyB->worldSpaceToBodySpace(jointWorldSpaceAnchor);
-    m_constraints.push_back(std::move(joint));
+        auto entityB =
+                cubeBuilder
+                    .position(joint->m_bodyA->position + glm::vec3(1, 0, 0))
+                    .mass(1)
+                .build();
+
+        auto &bodyB = entityB.get<Body>();
+        joint->m_bodyB = &bodyB;
+        joint->m_anchorB = joint->m_bodyB->worldSpaceToBodySpace(jointWorldSpaceAnchor);
+        m_constraints.push_back(std::move(joint));
+
+        spdlog::info("bodyA: {}", bodyA.position);
+        spdlog::info("bodyB: {}", bodyB.position);
+
+        entityA = entityB;
+    }
 
 //    Objects().build(cubeBuilder, registry);
 
