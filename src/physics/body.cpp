@@ -15,7 +15,7 @@ glm::vec3 Body::centerOfMassModelSpace() const {
 }
 
 glm::vec3 Body::worldSpaceToBodySpace(const glm::vec3 &pt) const {
-    auto temp = pt - centerOfMassModelSpace();
+    auto temp = pt - centerOfMassWorldSpace();
     auto inverseRotation = glm::inverse(glm::mat3(orientation));
     auto bodySpacePt = inverseRotation * temp;
     return bodySpacePt;
@@ -23,7 +23,7 @@ glm::vec3 Body::worldSpaceToBodySpace(const glm::vec3 &pt) const {
 
 glm::vec3 Body::bodySpaceToWorldSpace(const glm::vec3& pt) const {
     auto rotation = glm::mat3(orientation);
-    auto worldSpacePt = centerOfMassModelSpace() + rotation * pt;
+    auto worldSpacePt = centerOfMassWorldSpace() + rotation * pt;
     return worldSpacePt;
 }
 

@@ -451,6 +451,18 @@ void GameWorld::updateBodies(float dt) {
         });
     }
 
+    for(auto& constraint : m_constraints){
+        constraint->preSolve(dt);
+    }
+
+    for(auto& constraint : m_constraints){
+        constraint->solve();
+    }
+
+    for(auto& constraint : m_constraints){
+        constraint->postSolve();
+    }
+
     // apply ballistic impulse
     float accumulatedTime = 0.0f;
     for(auto& contact : contacts){
@@ -726,28 +738,55 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
 
 void GameWorld::createSceneObjects() {
 
-    auto sphereBuilder = ObjectBuilder(sphereEntity, &registry);
-    sphereBuilder
-        .position(10, 3, 0)
-        .linearVelocity(-100, 0, 0)
-        .mass(1)
-        .elasticity(0.5)
-        .friction(0.5)
-        .shape(std::make_shared<SphereShape>(0.5f))
-    .build();
+//    auto sphereBuilder = ObjectBuilder(sphereEntity, &registry);
+//    sphereBuilder
+//        .position(10, 3, 0)
+//        .linearVelocity(-100, 0, 0)
+//        .mass(1)
+//        .elasticity(0.5)
+//        .friction(0.5)
+//        .shape(std::make_shared<SphereShape>(0.5f))
+//    .build();
+//
+//    auto diamondBuilder = ObjectBuilder(diamondEntity, &registry);
+//    diamondBuilder
+//        .position(-10, 3, 0)
+//        .linearVelocity(100, 0, 0)
+//        .angularVelocity(0, 0, 10)
+//        .mass(1.0)
+//        .elasticity(0.5)
+//        .friction(0.5)
+//        .shape(diamondShape())
+//    .build().add<Diamond>();
 
-    auto diamondBuilder = ObjectBuilder(diamondEntity, &registry);
-    diamondBuilder
-        .position(-10, 3, 0)
-        .linearVelocity(100, 0, 0)
-        .angularVelocity(0, 0, 10)
-        .mass(1.0)
-        .elasticity(0.5)
-        .friction(0.5)
-        .shape(diamondShape())
-    .build().add<Diamond>();
+    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
 
-//    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
+    auto entityA =
+        cubeBuilder
+            .position(0, 5.0, 0)
+            .shape(std::make_shared<BoxShape>(g_boxSmall))
+            .mass(0)
+            .elasticity(1.0f)
+        .build();
+
+    auto entityB =
+        cubeBuilder
+            .position(1, 5, 0)
+            .mass(1)
+        .build();
+
+    auto& bodyA = entityA.get<Body>();
+    auto& bodyB = entityB.get<Body>();
+
+    const auto jointWorldSpaceAnchor = bodyA.position;
+    std::unique_ptr<Constraint> joint = std::make_unique<ConstraintDistance>();
+    joint->m_bodyA = &bodyA;
+    joint->m_anchorA = joint->m_bodyA->worldSpaceToBodySpace(jointWorldSpaceAnchor);
+
+    joint->m_bodyB = &bodyB;
+    joint->m_anchorB = joint->m_bodyB->worldSpaceToBodySpace(jointWorldSpaceAnchor);
+    m_constraints.push_back(std::move(joint));
+
 //    Objects().build(cubeBuilder, registry);
 
     sandBoxEntity =  SandBox().build(ObjectBuilder(cubeEntity, &registry), registry);

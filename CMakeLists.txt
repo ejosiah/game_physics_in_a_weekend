@@ -46,6 +46,8 @@ add_executable(game_physics_in_one_weekend_test ${HPP_FILES} ${TEST_FILES}
         ${CMAKE_CURRENT_LIST_DIR}/src/physics/gjk.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/physics/shape.cpp
         ${CMAKE_CURRENT_LIST_DIR}/src/physics/bounds.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/physics/body.cpp
+        ${CMAKE_CURRENT_LIST_DIR}/src/physics/constraint.cpp
         )
 target_link_libraries(game_physics_in_one_weekend_test PRIVATE  VulkanBase Vulkan::Vulkan ${GTEST_LIBS} ${CONAN_LIBS})
 gtest_add_tests(TARGET game_physics_in_one_weekend_test)

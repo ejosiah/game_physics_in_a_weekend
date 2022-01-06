@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <algorithm>
+#include <numeric>
+#include <glm/glm.hpp>
 #include "vecN.hpp"
 
 class VecNFixture : public ::testing::Test {
@@ -109,5 +112,92 @@ TEST_F(VecNFixture, ResetVectorN){
 
     for(int i= 0; i < 5; i++){
         ASSERT_EQ(v[i], 0);
+    }
+}
+
+TEST_F(VecNFixture, InitializeWithGlmVector){
+    vec12 v{
+        glm::vec4(0, 1, 2, 3),
+        glm::vec4(4, 5, 6, 7),
+        glm::vec4(8, 9, 10, 11)
+    };
+
+    for(int i = 0; i < 12; i++){
+        ASSERT_EQ(v[i], i);
+    }
+}
+
+TEST_F(VecNFixture, convertToGlmVectors){
+    auto v0 = glm::vec4(0, 1, 2, 3);
+    auto v1 = glm::vec4(4, 5, 6, 7);
+    auto v2 = glm::vec4(8, 9, 10, 11);
+
+    const vec12 v12{v0, v1, v2};
+
+    auto v = v12.split<4>();
+
+    ASSERT_EQ(v.size(), 3);
+    ASSERT_EQ(v[0], v0);
+    ASSERT_EQ(v[1], v1);
+    ASSERT_EQ(v[2], v2);
+}
+
+TEST_F(VecNFixture, NegateVector){
+    vec<4> v{1, 2, 3, -2};
+    auto nv = -v;
+
+    ASSERT_EQ(nv[0], -1);
+    ASSERT_EQ(nv[1], -2);
+    ASSERT_EQ(nv[2], -3);
+    ASSERT_EQ(nv[3], 2);
+}
+
+TEST_F(VecNFixture, CopyConstructor){
+    vec12 v1{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+
+    vec12 v2(v1);
+
+    for(auto i = 0; i < 12; i++){
+        ASSERT_EQ(v1[i], v2[i]);
+    }
+}
+
+TEST_F(VecNFixture, CheckCopyConstructorIsNotShallow){
+    vec12 v1{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+
+    vec12 v2(v1);
+
+    for(int i = 0; i < 12; i++){
+        v1[i] += 1;
+    }
+
+    for(auto i = 0; i < 12; i++){
+        ASSERT_NE(v1[i], v2[i]);
+    }
+}
+
+TEST_F(VecNFixture, MoveConstructor){
+    vec12 v1{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+
+    vec12 v2(v1);
+    vec12 v3(static_cast<vec12&&>(v2));
+
+    for(auto i = 0; i < 12; i++){
+        ASSERT_EQ(v1[i], v3[i]);
+    }
+}
+
+TEST_F(VecNFixture, CheckMoveConstructorIsNotShallow){
+    vec12 v1{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+
+    vec12 v2(v1);
+    vec12 v3(static_cast<vec12&&>(v2));
+
+    for(int i = 0; i < 12; i++){
+        v1[i] += 1;
+    }
+
+    for(auto i = 0; i < 12; i++){
+        ASSERT_NE(v1[i], v3[i]);
     }
 }
