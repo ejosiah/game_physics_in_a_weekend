@@ -79,6 +79,12 @@ void ConstraintDistance::preSolve(const float dt) {
     const auto impulses = m_Jacobian.transpose() * m_cachedLambda;
     applyImpulses(impulses);
 
+    // Calculate the baumgarte stabilization
+    auto C = glm::dot(r, r);
+    C = glm::max(0.0f, C - 0.01f);
+    const auto Beta = 0.05f;
+    m_baumgarte = (Beta / dt) * C;
+
 }
 
 void ConstraintDistance::solve() {
@@ -89,7 +95,8 @@ void ConstraintDistance::solve() {
     const auto invMassMatrix = inverseMassMatrix();
     const auto J_W_Jt = m_Jacobian * invMassMatrix * jacobianTranspose;
 
-    const auto rhs = m_Jacobian * -q_dt;
+    auto rhs = m_Jacobian * -q_dt;
+    rhs[0] -= m_baumgarte;
 
     // Solve for the Lagrange multipliers;
     const auto lambdaN = lcp::gaussSeidel(J_W_Jt, rhs);

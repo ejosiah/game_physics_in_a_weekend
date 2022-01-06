@@ -752,7 +752,7 @@ void GameWorld::createSceneObjects() {
                 cubeBuilder
                     .position(0, static_cast<float>(numJoints) + 3.0f, 5.0)
                     .shape(std::make_shared<BoxShape>(g_boxSmall))
-                    .mass(1)
+                    .mass(0)
                     .elasticity(1.0f)
                 .build();
         }
