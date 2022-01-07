@@ -507,6 +507,7 @@ void GameWorld::updateTransforms() {
         const auto& offset = view.get<const Offset>(entity);
         auto translate = glm::translate(glm::mat4(1), body.position + offset.value);
         auto rotate = glm::mat4(body.orientation);
+        glm::mat4_cast(body.orientation);
         auto scale = glm::scale(glm::mat4(1), view.get<const component::Scale>(entity).value);
 
         auto& transform = view.get<component::Transform>(entity);

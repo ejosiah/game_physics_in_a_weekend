@@ -1,6 +1,8 @@
 #pragma once
 
 #include <glm/glm.hpp>
+#include <glm/gtx/orthonormalize.hpp>
+#include <glm/gtc/matrix_access.hpp>
 
 inline void orthonormal(glm::vec3& a, glm::vec3& b, glm::vec3& c){
     auto n = glm::normalize(a);
