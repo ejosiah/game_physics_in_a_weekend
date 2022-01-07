@@ -1,5 +1,6 @@
 #include "manifold.hpp"
 #include "utility.hpp"
+#include <glm/gtx/quaternion.hpp>
 
 void Manifold::addContact(const Contact &contact) {
     auto newContact = contact;
@@ -75,7 +76,7 @@ void Manifold::addContact(const Contact &contact) {
     m_constraints[newSlot].m_anchorB = newContact.LocalSpace.pointOnB;
 
     // Get the normal in BodyA's space
-    auto normal = glm::mat3(m_bodyA->orientation) * -newContact.normal;
+    auto normal = glm::rotate(m_bodyA->orientation, -newContact.normal);
     m_constraints[newSlot].m_normal = glm::normalize(normal);
     m_constraints[newSlot].m_cachedLambda.clear();
 
@@ -91,7 +92,7 @@ void Manifold::removeExpiredContacts() {
 
         auto [bodyA, bodyB] = contact.bodies();
 
-        auto normal = glm::mat3(bodyA->orientation) * m_constraints[i].m_normal;
+        auto normal = glm::rotate(bodyA->orientation, m_constraints[i].m_normal);
 
         // Get the tangential distance of the point on A and the point on B
         const auto a = bodyA->bodySpaceToWorldSpace(contact.LocalSpace.pointOnA);

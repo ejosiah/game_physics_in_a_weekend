@@ -1,11 +1,10 @@
 #include "body.hpp"
-#include "utility.hpp"
-#include <spdlog/spdlog.h>
+#include <glm/gtx/quaternion.hpp>
 
 
 glm::vec3 Body::centerOfMassWorldSpace() const {
     auto centerOfMass = shape->centerOfMass();
-    auto wCenterOfMass = glm::mat3(orientation) * centerOfMass;
+    auto wCenterOfMass = glm::rotate(orientation, centerOfMass);
     auto pos = position + wCenterOfMass;
     return pos;
 }
@@ -16,14 +15,12 @@ glm::vec3 Body::centerOfMassModelSpace() const {
 
 glm::vec3 Body::worldSpaceToBodySpace(const glm::vec3 &pt) const {
     auto temp = pt - centerOfMassWorldSpace();
-    auto inverseRotation = glm::inverse(glm::mat3(orientation));
-    auto bodySpacePt = inverseRotation * temp;
+    auto bodySpacePt = glm::rotate(glm::inverse(orientation), temp);
     return bodySpacePt;
 }
 
 glm::vec3 Body::bodySpaceToWorldSpace(const glm::vec3& pt) const {
-    auto rotation = glm::mat3(orientation);
-    auto worldSpacePt = centerOfMassWorldSpace() + rotation * pt;
+    auto worldSpacePt = centerOfMassWorldSpace() + glm::rotate(orientation, pt);
     return worldSpacePt;
 }
 
@@ -93,7 +90,7 @@ void Body::update(float dt) {
     orientation = dq * orientation;
     orientation = glm::normalize(orientation);
 
-    position = com + glm::mat3(dq) * comToPosition;
+    position = com + glm::rotate(dq, comToPosition);
 }
 
 bool Body::hasInfiniteMass() const {

@@ -5,6 +5,7 @@
 #include <array>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include "intersectiontest.hpp"
 #include "bounds.hpp"
 #include "math.hpp"

@@ -17,9 +17,9 @@ void ConstraintPenetration::preSolve(const float dt) {
     orthonormal(m_normal, u, v);
 
     // Convert tangent space from model space to world space;
-    auto normal = glm::mat3(m_bodyA->orientation) * m_normal;
-    u = glm::mat3(m_bodyA->orientation) * u;
-    v = glm::mat3(m_bodyA->orientation) * v;
+    auto normal = glm::rotate(m_bodyA->orientation, m_normal);
+    u = glm::rotate(m_bodyA->orientation, u);
+    v = glm::rotate(m_bodyA->orientation, v);
 
     m_Jacobian.clear();
 
