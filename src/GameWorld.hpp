@@ -137,4 +137,5 @@ protected:
 
 
     std::vector<std::unique_ptr<ConstraintBase>> m_constraints;
+    ManifoldCollector m_manifolds;
 };

@@ -74,7 +74,6 @@ struct vec{
     }
 
     constexpr vec<N> operator+(const vec<N>& rhs) const {
-//        static_assert(M == N);
         vec<N> v;
         for(int i = 0; i < N; i++){
             v[i] = data[i] + rhs.data[i];

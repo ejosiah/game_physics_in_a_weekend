@@ -416,7 +416,8 @@ void GameWorld::createSphereInstance(glm::vec3 color, float mass, float elastici
 }
 
 void GameWorld::updateBodies(float dt) {
-    std::vector<ConstraintPenetration> penetrationConstraints;
+    m_manifolds.removeExpired();
+
     for(auto body : bodies){
         float mass = 1.0f/body->invMass;
         auto impulseGravity = GRAVITY * mass * dt;
@@ -441,15 +442,7 @@ void GameWorld::updateBodies(float dt) {
         Contact contact{};
         if(intersect(bodyA, bodyB, dt, contact)){
             if(contact.timeOfImpact == 0.0f){
-                ConstraintPenetration constraint;
-                constraint.m_bodyA = contact.bodyA;
-                constraint.m_bodyB = contact.bodyB;
-                constraint.m_anchorA = contact.LocalSpace.pointOnA;
-                constraint.m_anchorB = contact.LocalSpace.pointOnB;
-                auto normal = glm::inverse(glm::mat3(constraint.m_bodyA->orientation)) * -contact.normal;
-
-                constraint.m_normal = glm::normalize(normal);
-                penetrationConstraints.push_back(constraint);
+                m_manifolds.addContact(contact);
             }else {
                 contacts.push_back(contact);
             }
@@ -468,30 +461,19 @@ void GameWorld::updateBodies(float dt) {
         constraint->preSolve(dt);
     }
 
-    for(auto& constraint : penetrationConstraints){
-        constraint.preSolve(dt);
-    }
-
+    m_manifolds.preSolve(dt);
     static constexpr int maxIters = 5;
-    for(auto iters = 0; iters < maxIters && !m_constraints.empty(); iters++){
+    for(auto iters = 0; iters < maxIters; iters++){
         for(auto& constraint : m_constraints){
             constraint->solve();
         }
-    }
-
-    for(auto iters = 0; iters < maxIters && !penetrationConstraints.empty(); iters++){
-        for(auto& constraint : penetrationConstraints){
-            constraint.solve();
-        }
+        m_manifolds.solve();
     }
 
     for(auto& constraint : m_constraints){
         constraint->postSolve();
     }
-
-    for(auto& constraint : penetrationConstraints){
-        constraint.postSolve();
-    }
+    m_manifolds.postSolve();
 
     // apply ballistic impulse
     float accumulatedTime = 0.0f;
@@ -770,44 +752,6 @@ void GameWorld::createSceneObjects() {
 
     auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
 
-//    static constexpr int numJoints = 5;
-//    Entity entityA;
-//    for(auto i = 0; i < numJoints; i++) {
-//
-//        if(i == 0){
-//            entityA =
-//                cubeBuilder
-//                    .position(0, static_cast<float>(numJoints) + 3.0f, 5.0)
-//                    .shape(std::make_shared<BoxShape>(g_boxSmall))
-//                    .mass(0)
-//                    .elasticity(1.0f)
-//                .build();
-//        }
-//
-//        auto &bodyA = entityA.get<Body>();
-//        const auto jointWorldSpaceAnchor = bodyA.position;
-//        std::unique_ptr<ConstraintBase> joint = std::make_unique<ConstraintDistance>();
-//        joint->m_bodyA = &bodyA;
-//        joint->m_anchorA = joint->m_bodyA->worldSpaceToBodySpace(jointWorldSpaceAnchor);
-//
-//
-//        auto entityB =
-//                cubeBuilder
-//                    .position(joint->m_bodyA->position + glm::vec3(1, 0, 0))
-//                    .mass(1)
-//                .build();
-//
-//        auto &bodyB = entityB.get<Body>();
-//        joint->m_bodyB = &bodyB;
-//        joint->m_anchorB = joint->m_bodyB->worldSpaceToBodySpace(jointWorldSpaceAnchor);
-//        m_constraints.push_back(std::move(joint));
-//
-//        spdlog::info("bodyA: {}", bodyA.position);
-//        spdlog::info("bodyB: {}", bodyB.position);
-//
-//        entityA = entityB;
-//    }
-
     auto x = 0;
     auto z = 0;
     static constexpr auto stackHeight = 5;
@@ -826,13 +770,7 @@ void GameWorld::createSceneObjects() {
         .build();
     }
 
-//    Objects().build(cubeBuilder, registry);
-
     sandBoxEntity =  SandBox().build(ObjectBuilder(cubeEntity, &registry), registry);
-
-//    diamondEntity = createEntity("diamond");
-//    Diamond().build(device, render.pipeline, render.layout, diamondEntity, registry);
-
 
     auto view = registry.view<Body>();
     for(auto entity : view){

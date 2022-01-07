@@ -1,4 +1,6 @@
 #include "constraintPenetration.hpp"
+#include <fmt/ranges.h>
+#include <spdlog/spdlog.h>
 
 void ConstraintPenetration::preSolve(const float dt) {
     const auto worldAnchorA = m_bodyA->bodySpaceToWorldSpace(m_anchorA);
@@ -61,6 +63,7 @@ void ConstraintPenetration::preSolve(const float dt) {
 
     // apply warm starting from last frame;
     const auto impulses = m_Jacobian.transpose() * m_cachedLambda;
+
     applyImpulses(impulses);
 
     float C = glm::dot(b - a, normal);

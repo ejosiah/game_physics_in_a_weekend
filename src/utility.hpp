@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <glm/glm.hpp>
 
 
@@ -29,3 +30,10 @@ inline bool isInf(const glm::vec<L, T, Q>& vector){
     return glm::any(glm::isinf(vector));
 }
 
+
+template<glm::length_t L, typename T, glm::qualifier Q = glm::defaultp>
+void swap(const glm::vec<L, T, Q>& a, const glm::vec<L, T, Q>& b){
+    for(auto i = 0; i < L; i++){
+        std::swap(a[i], b[i]);
+    }
+}
