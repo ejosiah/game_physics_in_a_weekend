@@ -25,6 +25,14 @@ struct vec{
         }
     }
 
+    template<glm::length_t L, glm::qualifier Q = glm::defaultp>
+    constexpr vec(const glm::vec<L, float, Q>& v) {
+        static_assert(L == N);
+        for(auto i = 0; i < L; i++){
+            data[i] = v[i];
+        }
+    }
+
     constexpr explicit vec(float value){
         std::fill_n(data.begin(), N, value);
     }
@@ -150,6 +158,13 @@ struct vec{
 
 };
 
+template<size_t N>
+constexpr vec<N> clamp(const vec<N>& v, float lower, float upper){
+    return {};
+}
 
 using vec1 = vec<1>;
+using vec2 = vec<2>;
+using vec3 = vec<3>;
+using vec4 = vec<4>;
 using vec12 = vec<12>;

@@ -7,7 +7,8 @@
 #include "contact.hpp"
 #include "collision.hpp"
 #include "objectbuilder.hpp"
-#include "Constraint.hpp"
+#include "constraints.hpp"
+#include "manifold.hpp"
 
 class GameWorld : public VulkanBaseApp{
 public:
@@ -134,5 +135,6 @@ protected:
         float physicsTime{0};
     } simStates;
 
-    std::vector<std::unique_ptr<Constraint>> m_constraints;
+
+    std::vector<std::unique_ptr<ConstraintBase>> m_constraints;
 };

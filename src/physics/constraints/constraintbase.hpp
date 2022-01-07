@@ -4,8 +4,9 @@
 #include "vecN.hpp"
 #include "mat.hpp"
 #include "body.hpp"
+#include "lcp.hpp"
 
-class Constraint{
+class ConstraintBase{
 public:
     virtual void preSolve( const float dt) {}
     virtual void solve() {}
@@ -30,18 +31,4 @@ public:
 
     glm::vec3 m_anchorB;
     glm::vec3 m_axisB;
-};
-
-class ConstraintDistance : public Constraint {
-public:
-    void preSolve(float dt) override;
-
-    void solve() override;
-
-    void postSolve() override;
-
-private:
-    mat1x12 m_Jacobian;
-    vec1 m_cachedLambda{1};
-    float m_baumgarte{0};
 };

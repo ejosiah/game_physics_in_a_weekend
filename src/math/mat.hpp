@@ -118,6 +118,33 @@ public:
         }
     }
 
+    template<glm::length_t L, glm::qualifier Q = glm::defaultp>
+    void set(int row, int offset, const glm::vec<L, float, Q>& v) {
+        assert(offset + L <= N);
+        switch(L){
+            case 2:
+                rows[row][offset] = v[0];
+                rows[row][offset + 1] = v[1];
+                break;
+            case 3:
+                rows[row][offset] = v[0];
+                rows[row][offset + 1] = v[1];
+                rows[row][offset + 2] = v[2];
+                break;
+            case 4:
+                rows[row][offset] = v[0];
+                rows[row][offset + 1] = v[1];
+                rows[row][offset + 2] = v[2];
+                rows[row][offset + 3] = v[3];
+                break;
+            default:
+                for(int i = 0; i < L; i++){
+                    rows[row][offset + i] = v[i];
+                }
+                break;
+        }
+    }
+
     std::array<vec<N>, M> rows{};
 };
 
@@ -127,4 +154,5 @@ using matN = mat<N, N>;
 using mat1 = matN<1>;
 using mat3 = matN<3>;
 using mat1x12 = mat<1, 12>;
+using mat3x12 = mat<3, 12>;
 using mat12 = matN<12>;
