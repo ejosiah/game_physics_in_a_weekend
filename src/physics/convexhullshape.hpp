@@ -6,11 +6,9 @@
 
 class ConvexHullShape final : public Shape{
 public:
-    explicit ConvexHullShape(const std::vector<glm::vec3>& points = {}){
-        if(!points.empty()) {
-            build(points);
-        }
-    }
+    explicit ConvexHullShape(const std::vector<glm::vec3>& points = {});
+
+    ConvexHullShape(const ConvexHullShape& source, float scale);
 
     [[nodiscard]]
     Shape::Type type() const override;
@@ -41,9 +39,8 @@ public:
     [[nodiscard]]
     float fastLinearSpeed(const glm::vec3 &angularVelocity, const glm::vec3 &dir) const override;
 
-
-private:
     Bounds m_bounds;
+private:
     std::vector<glm::vec3> m_points;
     glm::mat3 m_inertiaTensor{};
     glm::vec3 m_centerOfMass{0};

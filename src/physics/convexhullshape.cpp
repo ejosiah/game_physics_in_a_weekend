@@ -2,6 +2,24 @@
 #include <spdlog/spdlog.h>
 #include <vulkan_util/glm_format.h>
 
+ConvexHullShape::ConvexHullShape(const std::vector<glm::vec3>& points){
+    if(!points.empty()) {
+        build(points);
+    }
+}
+
+ConvexHullShape::ConvexHullShape(const ConvexHullShape& source, float scale)
+: m_points(source.m_points)
+, m_inertiaTensor(source.m_inertiaTensor * scale)
+, m_hullTris(source.m_hullTris)
+, m_centerOfMass(source.m_centerOfMass * scale)
+{
+    for(auto& point : m_points){
+        point *= scale;
+    }
+    m_bounds.expand(m_points);
+}
+
 Shape::Type ConvexHullShape::type() const {
     return Type::CONVEX_HULL;
 }

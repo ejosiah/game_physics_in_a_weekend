@@ -10,6 +10,24 @@
 #include "constraints.hpp"
 #include "manifold.hpp"
 
+enum ObjectType{
+    SPHERE, BOX, DIAMOND
+};
+
+struct ObjectCreateProperties{
+    glm::vec3 size{1};
+    glm::vec3 velocity{0};
+    glm::vec3 position;
+    float mass{1};
+    float elasticity{1};
+    float friction{1};
+    int type{BOX};
+    float radius{1};
+    float speed{200};
+    float rotation{0};
+    bool create{false};
+};
+
 class GameWorld : public VulkanBaseApp{
 public:
     explicit GameWorld(const Settings& settings = {});
@@ -25,11 +43,13 @@ protected:
 
     void createDiamondEntity();
 
-    void createSphereInstance(glm::vec3 color, float mass = 1.0f, float elasticity = 1.0f, float radius = 1.0f, const glm::vec3& center = {0, 0, 0});
+    void newFrame() override;
+
+    void createObject();
 
     void createSceneObjects();
 
-    std::shared_ptr<ConvexHullShape> diamondShape();
+    std::shared_ptr<ConvexHullShape> diamondShape(float size = 1.0f);
 
     void createDescriptorPool();
 
@@ -59,6 +79,8 @@ protected:
 
     void renderUI(VkCommandBuffer commandBuffer);
 
+    void renderObjectCreateMenu(VkCommandBuffer commandBuffer);
+
     void updateBodies(float time);
 
     void resolveContact(Contact& contact);
@@ -73,7 +95,7 @@ protected:
         auto instanceBuffer = reinterpret_cast<InstanceData*>(renderComp.vertexBuffers[1].map());
 
         auto i = renderComp.instanceCount - 1;
-        auto view = registry.view<Tag, component::Transform>();
+        auto view = registry.view<Tag, component::Transform>(entt::exclude<Delete>);
         for(auto e : view){
             auto& transform = view.get<component::Transform>(e);
             instanceBuffer[i].transform = transform.value;
@@ -123,6 +145,7 @@ protected:
     bool m_runPhysics{false};
     const glm::vec3 GRAVITY{0, -10, 0};
     std::vector<Body*> bodies;
+    std::vector<ObjectCreateProperties> objectsToCreate;
     Action* createSphereAction;
     float targetFrameRate{120};
     int iterations{1};
@@ -135,6 +158,7 @@ protected:
         float physicsTime{0};
     } simStates;
 
+    ObjectCreateProperties objectCreateProps;
 
     std::vector<std::unique_ptr<ConstraintBase>> m_constraints;
     ManifoldCollector m_manifolds;

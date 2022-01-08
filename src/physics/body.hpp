@@ -5,6 +5,10 @@
 #include "shape.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <spdlog/spdlog.h>
+#include "formats.hpp"
 
 struct Body{
     glm::vec3 position{0};
@@ -15,6 +19,7 @@ struct Body{
     float elasticity{1};
     float friction{0.5};
     std::shared_ptr<Shape> shape;
+    boost::uuids::uuid id{boost::uuids::random_generator()()};
 
     [[nodiscard]]
     glm::vec3 centerOfMassWorldSpace() const;
@@ -74,6 +79,10 @@ inline void sort(const std::vector<Body*>& bodies, std::vector<PsuedoBody>& psue
     psuedoBodies.reserve(numBodies * 2);
     for(auto i = 0; i < numBodies; i++){
         auto body = bodies[i];
+        if(!body->shape){
+            spdlog::info("body {}, missing shape", body->id);
+            assert(body->shape);
+        }
         auto bounds = body->shape->bounds(body->position, body->orientation);
 
         // expand the bounds by the linear velocity;

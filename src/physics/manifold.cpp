@@ -110,14 +110,7 @@ void Manifold::removeExpiredContacts() {
             continue;
         }
 
-        // This contact has moved beyond its threshold and should be removed;
-        for(auto j = i; j < MAX_CONTACTS - 1; j++){
-            m_constraints[j] = m_constraints[j + 1];
-            if(j > m_numContacts){
-                m_constraints[j].m_cachedLambda.clear();
-            }
-        }
-        m_numContacts--;
+        removeContact(i);
         i--;
     }
 }
@@ -148,6 +141,26 @@ const Contact &Manifold::operator[](const int idx) const {
 Contact &Manifold::operator[](const int idx) {
     assert(idx < m_numContacts);
     return m_contacts[idx];
+}
+
+void Manifold::removeContact(const int idx) {
+    // This contact has moved beyond its threshold and should be removed;
+    for(auto j = idx; j < MAX_CONTACTS - 1; j++){
+        m_constraints[j] = m_constraints[j + 1];
+        if(j > m_numContacts){
+            m_constraints[j].m_cachedLambda.clear();
+        }
+    }
+    m_numContacts--;
+}
+
+void Manifold::removeContactFor(const Body *body) {
+    for(auto i = 0; i < m_numContacts; i++){
+        auto& contact = m_contacts[i];
+        if(contact.bodyA == body || contact.bodyB == body){
+            removeContact(i);
+        }
+    }
 }
 
 
@@ -203,3 +216,9 @@ void ManifoldCollector::postSolve() {{
         manifold.postSolve();
     }
 }}
+
+void ManifoldCollector::removeContactsFor(const Body *body) {
+    for(auto& manifold : m_manifolds){
+        manifold.removeContactFor(body);
+    }
+}

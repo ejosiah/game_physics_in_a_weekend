@@ -13,7 +13,11 @@ public:
 
     void removeExpiredContacts();
 
-    void preSolve(const float dt);
+    void removeContact(int idx);
+
+    void removeContactFor(const Body* body);
+
+    void preSolve(float dt);
 
     void solve();
 
@@ -23,6 +27,7 @@ public:
 
     Contact& operator[](int idx);
 
+    [[nodiscard]]
     inline int numContacts() const {
         return m_numContacts;
     }
@@ -52,6 +57,8 @@ public:
     void postSolve();
 
     void removeExpired();
+
+    void removeContactsFor(const Body* body);
 
     inline void clear() {
 

@@ -19,3 +19,5 @@ struct SceneObjectTag{};
 struct Offset{
     glm::vec3 value{0};
 };
+
+struct Delete{};

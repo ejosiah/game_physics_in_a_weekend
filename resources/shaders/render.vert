@@ -17,6 +17,7 @@ layout(location = 0) out struct{
     vec4 position;
     vec3 normal;
     vec3 localNormal;
+    vec3 eyes;
     vec3 color;
     vec2 uv;
 } v_out;
@@ -31,6 +32,7 @@ void main(){
     v_out.localNormal = normal;
     v_out.normal = worldNormal;
     v_out.color = color;
+    v_out.eyes = (view * vec4(0, 0, 0, 1)).xyz;
     v_out.uv = uv;
     gl_Position = projection * view * worldPosition;
 }

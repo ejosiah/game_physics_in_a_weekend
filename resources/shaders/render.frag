@@ -4,6 +4,7 @@ layout(location = 0) in struct {
     vec4 position;
     vec3 normal;
     vec3 localNormal;
+    vec3 eyes;
     vec3 color;
     vec2 uv;
 } v_in;
@@ -28,6 +29,7 @@ vec3 GetColorFromPositionAndNormal( in vec3 worldPosition, in vec3 normal ) {
         colorMultiplier = vec3( 0.5, 1, 0.5 );
     }
 
+
     t = ceil( t * 0.9 );
     s = ( ceil( s * 0.9 ) + 3.0 ) * 0.25;
     vec3 colorB = vec3( 0.85, 0.85, 0.85 );
@@ -41,6 +43,8 @@ vec3 GetColorFromPositionAndNormal( in vec3 worldPosition, in vec3 normal ) {
 void main(){
     vec3 N = normalize(v_in.normal);
     vec3 L = normalize(lightDir);
+    vec3 E = normalize(v_in.eyes);
+    vec3 H = normalize(E + L);
 
     vec3 albedo = vec3(0);
     float dx = 0.25;
@@ -52,7 +56,9 @@ void main(){
             albedo += GetColorFromPositionAndNormal( samplePos.xzy, v_in.localNormal.xzy) * dx * dy;
         }
     }
-    vec3 color = globalAmbience * albedo + max(0, dot(N, L)) * albedo;
+    float diffuse = max(0, dot(N, L));
+    float specular = max(0, pow(dot(N, H), 1000));
+    vec3 color = albedo * (globalAmbience + diffuse + specular);
 
     fragColor = vec4(color, 1);
 }

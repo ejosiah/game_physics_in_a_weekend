@@ -74,7 +74,7 @@ ObjectBuilder & ObjectBuilder::angularVelocity(const float x, const float y, con
 Entity ObjectBuilder::build() {
     assert(m_registry &&  entt::entity(m_baseEntity) != entt::null);
     Entity entity{ *m_registry };
-
+    entity.add<component::Parent>().entity = m_baseEntity;
 
     if(auto sphere = dynamic_cast<SphereShape*>(m_shape.get())){
         m_scale = glm::vec3(sphere->m_radius);

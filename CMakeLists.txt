@@ -29,6 +29,7 @@ include_directories(src)
 include_directories(src/physics)
 include_directories(src/physics/constraints)
 include_directories(src/math)
+include_directories(src/formats)
 
 file(GLOB_RECURSE HPP_FILES ${CMAKE_CURRENT_LIST_DIR}/src/*.hpp)
 file(GLOB_RECURSE CPP_FILES ${CMAKE_CURRENT_LIST_DIR}/src/*.cpp)

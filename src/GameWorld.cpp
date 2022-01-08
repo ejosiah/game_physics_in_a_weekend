@@ -5,10 +5,12 @@
 #include "utility.hpp"
 #include <vulkan_util/ImGuiPlugin.hpp>
 #include <vulkan_util/random.h>
+#include <vulkan_util/random.h>
 #include "sandbox.hpp"
 #include "objects.hpp"
 #include "diamond.hpp"
 #include "gjk.hpp"
+#include "formats.hpp"
 
 GameWorld::GameWorld(const Settings& settings) : VulkanBaseApp("Game Physics In One Weekend", settings) {
     fileManager.addSearchPath("spv");
@@ -28,8 +30,7 @@ void GameWorld::initApp() {
     createSphereEntity();
     createCubeEntity();
     createDiamondEntity();
-//    createSphereInstance({1, 1, 1}, 0.0f, 1.0f, 1000, {0, -1000, 0});
-//    createSphereInstance({1, 0, 0}, 0.0f, 1.0f, 1, {0, 1, 0});
+
     createSceneObjects();
 
 }
@@ -181,13 +182,12 @@ VkCommandBuffer *GameWorld::buildCommandBuffers(uint32_t imageIndex, uint32_t &n
 void GameWorld::update(float time) {
     static float dt = 1.0f/targetFrameRate;
     static int dtMs = static_cast<int>(dt * 1000);
-    int elapsedTimeMs = static_cast<int>(elapsedTime * 1000);
-    if(m_runPhysics && elapsedTimeMs % dtMs == 0){
-        static uint64_t physicsFrames = 1;
-        auto duration = profile([&]{ fixedUpdate(dt); });
-        auto frameTime = static_cast<float>(duration.count());
-        simStates.physicsTime = glm::mix(simStates.physicsTime, frameTime, 1.0/static_cast<float>(physicsFrames));
-        physicsFrames++;
+    auto elapsedTimeMs = static_cast<uint64_t>(elapsedTime * 1000);
+
+    bool runPhysics = m_runPhysics && (elapsedTimeMs % dtMs == 0) && (currentFrame % MAX_IN_FLIGHT_FRAMES == 0);
+
+    if(runPhysics){
+        fixedUpdate(dt);
     }
     if(moveCamera) {
         cameraController->update(time);
@@ -196,22 +196,26 @@ void GameWorld::update(float time) {
 }
 
 void GameWorld::fixedUpdate(float dt) {
+    static uint64_t physicsFrames = 1;
+
     float deltaTime = dt/float(iterations);
+    float frameTime = 0.0f;
     for(auto i = 0; i < iterations; i++){
-        updateBodies(deltaTime * timeScale);
+        auto duration = profile([&]{ updateBodies(deltaTime * timeScale); });
+        frameTime += static_cast<float>(duration.count());
     }
+    frameTime /= float(iterations);
+
+    simStates.physicsTime = glm::mix(simStates.physicsTime, frameTime, 1.0/static_cast<float>(physicsFrames));
+    physicsFrames++;
+
     updateTransforms();
     updateInstanceTransforms();
 }
 
 void GameWorld::checkAppInputs() {
     if(createSphereAction->isPressed()){
-        const auto& cam = cameraController->cam();
-        auto dir = glm::unProject(glm::vec3(mouse.position, 1), cam.view, cam.proj, glm::vec4{0, 0, width, height});
-        dir = glm::normalize(dir);
-        auto t = glm::length(cameraController->position());
-        auto pos = cameraController->position() + dir * t;
-        createSphereInstance(randomColor(), 1.0f, 0.8f, 1.0f, pos);
+        createObject();
     }
     if(moveCamera) {
         cameraController->processInput();
@@ -254,6 +258,7 @@ void GameWorld::initCamera() {
     settings.horizontalFov = true;
     settings.velocity = glm::vec3(10);
     settings.acceleration = glm::vec3(5);
+    settings.zFar = 200;
     cameraController = std::make_unique<CameraController>(device, swapChain.imageCount(), currentImageIndex, dynamic_cast<InputManager&>(*this), settings);
     cameraController->setMode(CameraMode::SPECTATOR);
     cameraController->lookAt({18, 17, 25}, {0, 3, 0}, {0, 1, 0});
@@ -400,20 +405,74 @@ void GameWorld::createDiamondEntity() {
     pipelines.add({render.pipeline, render.layout});
 }
 
-void GameWorld::createSphereInstance(glm::vec3 color, float mass, float elasticity, float radius, const glm::vec3& center) {
+void GameWorld::createObject() {
+    const auto& cam = cameraController->cam();
+    auto dir = glm::unProject(glm::vec3(mouse.position, 1), cam.view, cam.proj, glm::vec4{0, 0, width, height});
+    dir = glm::normalize(dir);
+    auto t = glm::length(cameraController->position());
+    glm::vec3 angularVelocity{0};
+    if(objectCreateProps.speed == 0){
+        objectCreateProps.position = cameraController->position() + dir * t;
+        objectCreateProps.velocity = glm::vec3(0);
+    }else{
+        objectCreateProps.position = cameraController->position();
+        objectCreateProps.velocity = dir * objectCreateProps.speed;
+        if(objectCreateProps.rotation > 0){
+            angularVelocity = glm::normalize(randomVec3()) * objectCreateProps.rotation;
+        }
+    }
+    Entity entity;
+    if (objectCreateProps.type == ObjectType::SPHERE) {
+        entity =
+                ObjectBuilder(sphereEntity, &registry)
+                        .shape(std::make_shared<SphereShape>(objectCreateProps.radius))
+                        .position(objectCreateProps.position)
+                        .mass(objectCreateProps.mass)
+                        .elasticity(objectCreateProps.elasticity)
+                        .friction(objectCreateProps.friction)
+                        .linearVelocity(objectCreateProps.velocity)
+                        .angularVelocity(angularVelocity)
+                        .build();
+    } else if (objectCreateProps.type == ObjectType::BOX) {
+        auto box = g_halfBoxUnit;
+        for (auto &v : box) {
+            v *= objectCreateProps.size;
+        }
+        entity =
+                ObjectBuilder(cubeEntity, &registry)
+                        .shape(std::make_shared<BoxShape>(box))
+                        .position(objectCreateProps.position)
+                        .mass(objectCreateProps.mass)
+                        .elasticity(objectCreateProps.elasticity)
+                        .friction(objectCreateProps.friction)
+                        .linearVelocity(objectCreateProps.velocity)
+                        .angularVelocity(angularVelocity)
+                        .build();
+    } else if (objectCreateProps.type == ObjectType::DIAMOND) {
+        entity =
+                ObjectBuilder(diamondEntity, &registry)
+                        .shape(diamondShape(objectCreateProps.radius))
+                        .position(objectCreateProps.position)
+                        .mass(objectCreateProps.mass)
+                        .elasticity(objectCreateProps.elasticity)
+                        .friction(objectCreateProps.friction)
+                        .linearVelocity(objectCreateProps.velocity)
+                        .angularVelocity(angularVelocity)
+                        .build();
+        entity.add<Diamond>();
 
-    auto entity =
-        ObjectBuilder(cubeEntity, &registry)
-            .shape(std::make_shared<BoxShape>(g_boxUnit))
-            .color(color)
-            .position(center)
-            .mass(mass)
-            .friction(1)
-            .elasticity(elasticity)
-        .build();
-    bodies.push_back(&entity.get<Body>());
+        auto unitBounds = diamondShape()->m_bounds;
+        auto unitSize = (unitBounds.max - unitBounds.min);
+        auto scaledSize = unitSize * objectCreateProps.radius;
+        entity.get<component::Scale>().value = scaledSize / unitSize;
+        entity.get<Offset>().value = (unitBounds.min + unitBounds.max) * 0.5f * objectCreateProps.radius;
+    }
 
+    auto &body = entity.get<Body>();
+    bodies.push_back(&body);
+    spdlog::debug("added body {} to scene", body.id);
 }
+
 
 void GameWorld::updateBodies(float dt) {
     m_manifolds.removeExpired();
@@ -500,7 +559,7 @@ void GameWorld::updateBodies(float dt) {
 }
 
 void GameWorld::updateTransforms() {
-    auto view = registry.view<const Body, const Offset, const component::Scale, component::Transform>();
+    auto view = registry.view<const Body, const Offset, const component::Scale, component::Transform>(entt::exclude<Delete>);
 
     for(auto entity : view){
         const auto& body = view.get<const Body>(entity);
@@ -737,7 +796,7 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
 //    }
 
     if(ImGui::CollapsingHeader("Simulation Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
-        ImGui::Text("Objects: %d", simStates.numObjects);
+        ImGui::Text("Objects: %d", bodies.size());
         ImGui::Text("Collisions: %d", simStates.numCollisions);
         ImGui::Text("Physics average %.3f ms/frame", simStates.physicsTime);
     }
@@ -746,7 +805,38 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
     ImGui::Text("fps: %d", framePerSecond);
     ImGui::End();
 
+    renderObjectCreateMenu(commandBuffer);
+
     plugin(IM_GUI_PLUGIN).draw(commandBuffer);
+}
+
+void GameWorld::renderObjectCreateMenu(VkCommandBuffer commandBuffer) {
+    ImGui::Begin("Create Object");
+    ImGui::SetWindowSize("Create Object", {300, 250});
+    ImGui::SliderFloat("Mass (kg)", &objectCreateProps.mass, 0.0f, 20.0f);
+    ImGui::SliderFloat("Elasticity", &objectCreateProps.elasticity, 0.0f, 1.0f);
+    ImGui::SliderFloat("Friction", &objectCreateProps.friction, 0.0f, 1.0f);
+    ImGui::SliderFloat("Velocity", &objectCreateProps.speed, 0.0f, 200.0f);
+    ImGui::SliderFloat("Rotation", &objectCreateProps.rotation, 0.0f, 30.0f);
+
+    if(ImGui::CollapsingHeader("Object Info", ImGuiTreeNodeFlags_DefaultOpen)){
+        ImGui::RadioButton("Box", &objectCreateProps.type, ObjectType::BOX); ImGui::SameLine();
+        ImGui::RadioButton("Sphere", &objectCreateProps.type, ObjectType::SPHERE); ImGui::SameLine();
+        ImGui::RadioButton("Diamond", &objectCreateProps.type, ObjectType::DIAMOND);
+
+        if(objectCreateProps.type == BOX){
+            ImGui::DragFloat3("Size", reinterpret_cast<float*>(&objectCreateProps.size), 0.2f, 0.1f, 5.0f);
+        }
+
+        if(objectCreateProps.type == SPHERE){
+            ImGui::DragFloat("Radius", &objectCreateProps.radius, 1.0f, 0.1f, 5.0f);
+        }
+
+        if(objectCreateProps.type == DIAMOND){
+            ImGui::DragFloat("scale", &objectCreateProps.radius, 1.0f, 0.1f, 5.0f);
+        }
+    }
+    ImGui::End();
 }
 
 void GameWorld::createSceneObjects() {
@@ -835,7 +925,60 @@ bool GameWorld::conservativeAdvance(Body &bodyA, Body &bodyB, float dt, Contact 
     return false;
 }
 
-std::shared_ptr<ConvexHullShape> GameWorld::diamondShape() {
+std::shared_ptr<ConvexHullShape> GameWorld::diamondShape(float size) {
     auto& shape = diamondEntity.get<ConvexHullShape>();
-    return std::shared_ptr<ConvexHullShape>( &shape, [](auto* ){});
+    if(size == 1) {
+        return std::shared_ptr<ConvexHullShape>(&shape, [](auto *) {});
+    }
+    return std::make_shared<ConvexHullShape>(shape, size);
+}
+
+void GameWorld::newFrame() {
+// FIXME don't rely on the ordering of ECS, order changes when entities get deleted
+// FIXME external references to become invalidated when entities within the ECS are deleted
+//    auto elapsedTimeMs = static_cast<uint64_t>(elapsedTime * 1000);
+//    if(elapsedTimeMs % 1000 == 0 && currentFrame % MAX_IN_FLIGHT_FRAMES == 0){
+//        auto view = registry.view<Body, component::Parent>(entt::exclude<Delete>);
+//        std::vector<entt::entity> removeList;
+//        std::vector<Body*> removeBodyList;
+//
+//        for(auto entity : view){
+//            auto& body = view.get<Body>(entity);
+//            auto camPos = cameraController->position();
+//            auto dist = glm::distance(camPos, body.position);
+//            if(dist > cameraController->far()){
+//                body.invMass = 0;
+//                body.linearVelocity = glm::vec3(0);
+//                body.angularVelocity = glm::vec3(0);
+//
+//                spdlog::info("deleting body: {}", body.id);
+//                m_manifolds.removeContactsFor(&body);
+//                removeBodyList.push_back(&body);
+//                removeList.push_back(entity);
+//                auto parentEntity = view.get<component::Parent>(entity).entity;
+//                registry.get<component::Render>(parentEntity).instanceCount--;
+//                spdlog::info("instance Count : {}", registry.get<component::Render>(parentEntity).instanceCount);
+//            }
+//        }
+//
+//        for(int i = static_cast<int>(bodies.size()) - 1; i >= 0; i--){
+//            auto body = bodies[i];
+//            auto itr = std::find_if(removeBodyList.begin(), removeBodyList.end(), [&](const auto pBody){
+//                return pBody->id == body->id;
+//            });
+//            if(itr != removeBodyList.end()) {
+//                bodies.erase(bodies.begin() + i);
+//            }
+//        }
+//
+//        for(auto entity : removeList){
+//            registry.emplace<Delete>(entity);
+//            registry.destroy(entity);
+//        }
+//    }
+//
+//    if(currentFrame % MAX_IN_FLIGHT_FRAMES == 0){
+//        createObject();
+//    }
+
 }
