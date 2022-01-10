@@ -155,4 +155,5 @@ using mat1 = matN<1>;
 using mat3 = matN<3>;
 using mat1x12 = mat<1, 12>;
 using mat3x12 = mat<3, 12>;
+using mat4x12 = mat<4, 12>;
 using mat12 = matN<12>;
