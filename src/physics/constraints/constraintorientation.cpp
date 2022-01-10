@@ -2,7 +2,7 @@
 #include "vectorops.hpp"
 #include "constraintorientation.hpp"
 
-void ConstraintOrientation::preSolve(const float dt) {
+void ConstraintHingeQuat::preSolve(const float dt) {
     const auto worldAnchorA = m_bodyA->bodySpaceToWorldSpace(m_anchorA);
     const auto worldAnchorB = m_bodyB->bodySpaceToWorldSpace(m_anchorB);
 
@@ -17,9 +17,10 @@ void ConstraintOrientation::preSolve(const float dt) {
     const auto q0_inv = glm::inverse(m_q0);
     const auto q1_inv = glm::inverse(q1);
 
-    const auto u = glm::vec3{1, 0, 0};
-    const auto v = glm::vec3{0, 1, 0};
-    const auto w = glm::vec3{0, 0, 1};
+    glm::vec3 u, v;
+    auto hingeAxis = m_axisA;
+    orthonormal(hingeAxis, u, v);
+
 
     glm::mat4 P{
             {0, 0, 0, 0},
@@ -50,7 +51,6 @@ void ConstraintOrientation::preSolve(const float dt) {
 
     // The quaternion jacobians
     const auto idx = 1;
-
     glm::vec4 tmp;
     {
         J1 = glm::vec3(0);
@@ -82,21 +82,9 @@ void ConstraintOrientation::preSolve(const float dt) {
         J4 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
         m_Jacobian.set(2, 9, J4);
     }
-    {
-        J1 = glm::vec3(0);
-        m_Jacobian.set(3, 0, J1);
 
-        tmp = MatA * glm::vec4(0, w.x, w.y, w.z);
-        J2 = { tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
-        m_Jacobian.set(3, 3, J2);
-
-        J3 = glm::vec3(0);
-        m_Jacobian.set(3, 6, J3);
-
-        tmp = MatB * glm::vec4(0, w.x, w.y, w.z);
-        J4 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
-        m_Jacobian.set(3, 9, J4);
-    }
+    const auto impulses = m_Jacobian.transpose() * m_cachedLambda;
+    applyImpulses(impulses);
 
     // Calculate the baumgarte stabilization;
     auto C = glm::dot(r, r);
@@ -105,7 +93,7 @@ void ConstraintOrientation::preSolve(const float dt) {
     m_baumgarte = (Beta / dt) * C;
 }
 
-void ConstraintOrientation::solve() {
+void ConstraintHingeQuat::solve() {
     const auto jacobianTranspose = m_Jacobian.transpose();
 
     // Build the system of equations
@@ -122,3 +110,16 @@ void ConstraintOrientation::solve() {
 
     applyImpulses(impulses);
 }
+
+void ConstraintHingeQuat::postSolve() {
+    if( m_cachedLambda[0] * 0.0f != m_cachedLambda[0] * 0.0f){
+        m_cachedLambda[0] = 0.0f;
+    }
+
+    static constexpr float limit = 1e5f;
+    if(m_cachedLambda[0] > limit){
+        m_cachedLambda[0] = limit;
+    }
+    if(m_cachedLambda[0] < -limit){
+        m_cachedLambda[0] = -limit;
+    }}

@@ -5,11 +5,11 @@
 class ConstraintPenetration : public ConstraintBase{
 public:
 
-    void preSolve(const float dt) override;
+    void preSolve(float dt) override;
 
     void solve() override;
 
-    vec3 m_cachedLambda{3};
+    vec3 m_cachedLambda{0};
     glm::vec3 m_normal;
 
     mat3x12 m_Jacobian;

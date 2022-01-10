@@ -9,7 +9,7 @@
 
 class ConstraintBase{
 public:
-    virtual void preSolve( const float dt) {}
+    virtual void preSolve(float dt) {}
     virtual void solve() {}
     virtual void postSolve(){}
 
