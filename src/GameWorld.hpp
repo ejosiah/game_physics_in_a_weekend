@@ -35,6 +35,8 @@ public:
 protected:
     void initApp() override;
 
+    void initBasis();
+
     void initCamera();
 
     void createSphereEntity();
@@ -59,6 +61,8 @@ protected:
 
     void createRenderPipeline();
 
+    void createRenderBasisPipeline();
+
     void createComputePipeline();
 
     bool conservativeAdvance(Body& bodyA, Body& bodyB, float dt, Contact& contact);
@@ -81,6 +85,8 @@ protected:
 
     void renderObjectCreateMenu(VkCommandBuffer commandBuffer);
 
+    void debugMenu(VkCommandBuffer commandBuffer);
+
     void updateBodies(float time);
 
     void resolveContact(Contact& contact);
@@ -88,6 +94,8 @@ protected:
     void updateTransforms();
 
     void updateInstanceTransforms();
+
+    void renderObjectBasis(VkCommandBuffer commandBuffer);
 
     template<typename Tag>
     void updateInstanceTransform(Entity entity){
@@ -132,6 +140,12 @@ protected:
         VulkanPipeline pipeline;
     } compute;
 
+    struct {
+        VulkanPipelineLayout layout;
+        VulkanPipeline pipeline;
+        VulkanBuffer vertices;
+    } renderBasis;
+
     VulkanDescriptorPool descriptorPool;
     VulkanCommandPool commandPool;
     std::vector<VkCommandBuffer> commandBuffers;
@@ -162,4 +176,5 @@ protected:
 
     std::vector<std::unique_ptr<ConstraintBase>> m_constraints;
     ManifoldCollector m_manifolds;
+    bool m_showBasis{false};
 };

@@ -11,6 +11,7 @@ int main(){
     try{
         std::unique_ptr<Plugin> plugin = std::make_unique<ImGuiPlugin>();
         Settings settings;
+        settings.enabledFeatures.wideLines = true;
         settings.depthTest = true;
 
         auto app = GameWorld{ settings };

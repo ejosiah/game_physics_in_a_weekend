@@ -11,6 +11,7 @@
 #include "diamond.hpp"
 #include "gjk.hpp"
 #include "formats.hpp"
+#include "Basis.hpp"
 
 GameWorld::GameWorld(const Settings& settings) : VulkanBaseApp("Game Physics In One Weekend", settings) {
     fileManager.addSearchPath("spv");
@@ -24,8 +25,10 @@ void GameWorld::initApp() {
     createCommandPool();
     initCamera();
     createSkyBox();
+    initBasis();
     createPipelineCache();
     createRenderPipeline();
+    createRenderBasisPipeline();
     createComputePipeline();
     createSphereEntity();
     createCubeEntity();
@@ -170,6 +173,10 @@ VkCommandBuffer *GameWorld::buildCommandBuffers(uint32_t imageIndex, uint32_t &n
     vkCmdBeginRenderPass(commandBuffer, &rPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
     renderEntities(commandBuffer);
+
+    if(m_showBasis) {
+        renderObjectBasis(commandBuffer);
+    }
     renderUI(commandBuffer);
 
     vkCmdEndRenderPass(commandBuffer);
@@ -806,7 +813,7 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
     ImGui::End();
 
     renderObjectCreateMenu(commandBuffer);
-
+    debugMenu(commandBuffer);
     plugin(IM_GUI_PLUGIN).draw(commandBuffer);
 }
 
@@ -836,6 +843,13 @@ void GameWorld::renderObjectCreateMenu(VkCommandBuffer commandBuffer) {
             ImGui::DragFloat("scale", &objectCreateProps.radius, 1.0f, 0.1f, 5.0f);
         }
     }
+    ImGui::End();
+}
+
+void GameWorld::debugMenu(VkCommandBuffer commandBuffer) {
+    ImGui::Begin("Debug");
+    ImGui::SetWindowSize("Create Object", {300, 250});
+    ImGui::Checkbox("show basis", &m_showBasis);
     ImGui::End();
 }
 
@@ -981,4 +995,69 @@ void GameWorld::newFrame() {
 //        createObject();
 //    }
 
+}
+
+void GameWorld::createRenderBasisPipeline() {
+        auto builder = device.graphicsPipelineBuilder();
+        renderBasis.pipeline =
+            builder
+                .shaderStage()
+                    .vertexShader(load("basis.vert.spv"))
+                    .fragmentShader(load("basis.frag.spv"))
+                .vertexInputState()
+                    .addVertexBindingDescription(0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX)
+                    .addVertexAttributeDescription(0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(Vertex, position))
+                    .addVertexAttributeDescription(1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetOf(Vertex, color))
+                .inputAssemblyState()
+                    .lines()
+                .viewportState()
+                    .viewport()
+                        .origin(0, 0)
+                        .dimension(swapChain.extent)
+                        .minDepth(0)
+                        .maxDepth(1)
+                    .scissor()
+                        .offset(0, 0)
+                        .extent(swapChain.extent)
+                    .add()
+                .rasterizationState()
+                    .frontFaceCounterClockwise()
+                    .polygonModeFill()
+					.lineWidth(1.5)
+                    .cullNone()
+                .depthStencilState()
+                    .enableDepthWrite()
+                    .enableDepthTest()
+                    .compareOpLess()
+                    .minDepthBounds(0)
+                    .maxDepthBounds(1)
+                .colorBlendState()
+                    .attachment()
+                    .add()
+                .layout()
+                  .addPushConstantRange(Camera::pushConstant())
+                .renderPass(renderPass)
+                .subpass(0)
+                .name("render_basis")
+            .build(renderBasis.layout);
+}
+
+void GameWorld::initBasis() {
+    auto vertices = basis::create();
+    renderBasis.vertices = device.createDeviceLocalBuffer(vertices.data(), BYTE_SIZE(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+
+}
+
+void GameWorld::renderObjectBasis(VkCommandBuffer commandBuffer) {
+    auto view = registry.view<Body, component::Transform>();
+
+    VkDeviceSize offset = 0;
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderBasis.pipeline);
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, renderBasis.vertices, &offset);
+    for(auto entity : view){
+        auto model = view.get<component::Transform>(entity).value;
+        cameraController->push(commandBuffer, renderBasis.layout, model);
+        vkCmdDraw(commandBuffer, renderBasis.vertices.size/sizeof(Vertex), 1, 0, 0);
+    }
+    cameraController->setModel(glm::mat4(1));
 }
