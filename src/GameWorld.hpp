@@ -11,7 +11,7 @@
 #include "manifold.hpp"
 
 enum ObjectType{
-    SPHERE, BOX, DIAMOND
+    SPHERE, BOX, DIAMOND, STACK
 };
 
 struct ObjectCreateProperties{
@@ -25,6 +25,7 @@ struct ObjectCreateProperties{
     float radius{1};
     float speed{200};
     float rotation{0};
+    int stackHeight{5};
     bool create{false};
 };
 
@@ -50,6 +51,8 @@ protected:
     void createObject();
 
     void createSceneObjects();
+
+    std::vector<Entity> createStack(const glm::vec3& position = glm::vec3(0), int height = 5);
 
     std::shared_ptr<ConvexHullShape> diamondShape(float size = 1.0f);
 

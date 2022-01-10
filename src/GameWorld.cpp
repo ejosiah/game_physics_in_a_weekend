@@ -428,9 +428,9 @@ void GameWorld::createObject() {
             angularVelocity = glm::normalize(randomVec3()) * objectCreateProps.rotation;
         }
     }
-    Entity entity;
+    std::vector<Entity> entities;
     if (objectCreateProps.type == ObjectType::SPHERE) {
-        entity =
+        auto entity =
                 ObjectBuilder(sphereEntity, &registry)
                         .shape(std::make_shared<SphereShape>(objectCreateProps.radius))
                         .position(objectCreateProps.position)
@@ -440,12 +440,13 @@ void GameWorld::createObject() {
                         .linearVelocity(objectCreateProps.velocity)
                         .angularVelocity(angularVelocity)
                         .build();
+        entities.push_back(entity);
     } else if (objectCreateProps.type == ObjectType::BOX) {
         auto box = g_halfBoxUnit;
         for (auto &v : box) {
             v *= objectCreateProps.size;
         }
-        entity =
+        auto  entity =
                 ObjectBuilder(cubeEntity, &registry)
                         .shape(std::make_shared<BoxShape>(box))
                         .position(objectCreateProps.position)
@@ -455,8 +456,9 @@ void GameWorld::createObject() {
                         .linearVelocity(objectCreateProps.velocity)
                         .angularVelocity(angularVelocity)
                         .build();
+        entities.push_back(entity);
     } else if (objectCreateProps.type == ObjectType::DIAMOND) {
-        entity =
+        auto entity =
                 ObjectBuilder(diamondEntity, &registry)
                         .shape(diamondShape(objectCreateProps.radius))
                         .position(objectCreateProps.position)
@@ -473,11 +475,16 @@ void GameWorld::createObject() {
         auto scaledSize = unitSize * objectCreateProps.radius;
         entity.get<component::Scale>().value = scaledSize / unitSize;
         entity.get<Offset>().value = (unitBounds.min + unitBounds.max) * 0.5f * objectCreateProps.radius;
+        entities.push_back(entity);
+    } else if(objectCreateProps.type == ObjectType::STACK){
+        entities = createStack(objectCreateProps.position, objectCreateProps.stackHeight);
     }
 
-    auto &body = entity.get<Body>();
-    bodies.push_back(&body);
-    spdlog::debug("added body {} to scene", body.id);
+    for(auto entity : entities) {
+        auto &body = entity.get<Body>();
+        bodies.push_back(&body);
+        spdlog::debug("added body {} to scene", body.id);
+    }
 }
 
 
@@ -830,6 +837,7 @@ void GameWorld::renderObjectCreateMenu(VkCommandBuffer commandBuffer) {
         ImGui::RadioButton("Box", &objectCreateProps.type, ObjectType::BOX); ImGui::SameLine();
         ImGui::RadioButton("Sphere", &objectCreateProps.type, ObjectType::SPHERE); ImGui::SameLine();
         ImGui::RadioButton("Diamond", &objectCreateProps.type, ObjectType::DIAMOND);
+        ImGui::RadioButton("Stack", &objectCreateProps.type, ObjectType::STACK);
 
         if(objectCreateProps.type == BOX){
             ImGui::DragFloat3("Size", reinterpret_cast<float*>(&objectCreateProps.size), 0.2f, 0.1f, 5.0f);
@@ -841,6 +849,11 @@ void GameWorld::renderObjectCreateMenu(VkCommandBuffer commandBuffer) {
 
         if(objectCreateProps.type == DIAMOND){
             ImGui::DragFloat("scale", &objectCreateProps.radius, 1.0f, 0.1f, 5.0f);
+        }
+        if(objectCreateProps.type == STACK){
+            objectCreateProps.speed = 0;
+            objectCreateProps.rotation = 0;
+            ImGui::SliderInt("Height", &objectCreateProps.stackHeight, 2, 10);
         }
     }
     ImGui::End();
@@ -855,26 +868,6 @@ void GameWorld::debugMenu(VkCommandBuffer commandBuffer) {
 
 void GameWorld::createSceneObjects() {
 
-    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
-
-    auto x = 0;
-    auto z = 0;
-    static constexpr auto stackHeight = 5;
-    for(int y = 0; y < stackHeight; y++){
-        auto offset = ((y & 1) == 0) ? 0.0f : 0.15f;
-        auto xx = static_cast<float>(x) + offset;
-        auto zz = static_cast<float>(z) + offset;
-        auto delta = 0.04f;
-        auto scaleHeight = 2.0f + delta;
-        auto deltaHeight = 1.0f + delta;
-        cubeBuilder
-            .position(xx * scaleHeight, deltaHeight + y * scaleHeight, zz * scaleHeight)
-            .shape(std::make_shared<BoxShape>(g_boxUnit))
-            .mass(1)
-            .elasticity(1.0f)
-        .build();
-    }
-
     sandBoxEntity =  SandBox().build(ObjectBuilder(cubeEntity, &registry), registry);
 
     auto view = registry.view<Body>();
@@ -884,6 +877,35 @@ void GameWorld::createSceneObjects() {
     }
 
     simStates.numObjects = bodies.size();
+}
+
+std::vector<Entity> GameWorld::createStack(const glm::vec3& position, int height) {
+    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
+
+    std::vector<Entity> entities;
+
+    auto x = 0;
+    auto z = 0;
+    for(int y = 0; y < height; y++){
+        auto offset = ((y & 1) == 0) ? 0.0f : 0.15f;
+        auto xx = static_cast<float>(x) + offset;
+        auto zz = static_cast<float>(z) + offset;
+        auto delta = 0.04f;
+        auto scaleHeight = 2.0f + delta;
+        auto deltaHeight = 1.0f + delta;
+        auto center = glm::vec3(xx * scaleHeight, deltaHeight + y * scaleHeight, zz * scaleHeight);
+        center.x += position.x;
+        center.z += position.z;
+        auto entity =
+            cubeBuilder
+                .position(center)
+                .shape(std::make_shared<BoxShape>(g_boxUnit))
+                .mass(1)
+                .elasticity(1.0f)
+            .build();
+        entities.push_back(entity);
+    }
+    return entities;
 }
 
 bool GameWorld::conservativeAdvance(Body &bodyA, Body &bodyB, float dt, Contact &contact) {
