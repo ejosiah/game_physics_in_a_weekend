@@ -6,3 +6,4 @@
 #include "constraintorientation.hpp"
 #include "constrainthingequatlimited.hpp"
 #include "constraintconstantvelocity.hpp"
+#include "constraintconstantvelocitylimited.hpp"

@@ -11,7 +11,7 @@
 #include "manifold.hpp"
 
 enum ObjectType{
-    SPHERE, BOX, DIAMOND, STACK
+    SPHERE, BOX, DIAMOND, STACK, RAG_DOLL
 };
 
 struct ObjectCreateProperties{

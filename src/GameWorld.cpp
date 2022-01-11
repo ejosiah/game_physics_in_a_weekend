@@ -12,6 +12,8 @@
 #include "gjk.hpp"
 #include "formats.hpp"
 #include "Basis.hpp"
+#include "models.hpp"
+#include "ragdoll.hpp"
 
 GameWorld::GameWorld(const Settings& settings) : VulkanBaseApp("Game Physics In One Weekend", settings) {
     fileManager.addSearchPath("spv");
@@ -478,6 +480,8 @@ void GameWorld::createObject() {
         entities.push_back(entity);
     } else if(objectCreateProps.type == ObjectType::STACK){
         entities = createStack(objectCreateProps.stack.type, objectCreateProps.position, objectCreateProps.stack.height);
+    }else if(objectCreateProps.type == ObjectType::RAG_DOLL){
+        entities = Ragdoll::build(cubeEntity, registry, m_constraints, objectCreateProps.position);
     }
 
     for(auto entity : entities) {
@@ -837,7 +841,8 @@ void GameWorld::renderObjectCreateMenu(VkCommandBuffer commandBuffer) {
         ImGui::RadioButton("Box", &objectCreateProps.type, ObjectType::BOX); ImGui::SameLine();
         ImGui::RadioButton("Sphere", &objectCreateProps.type, ObjectType::SPHERE); ImGui::SameLine();
         ImGui::RadioButton("Diamond", &objectCreateProps.type, ObjectType::DIAMOND);
-        ImGui::RadioButton("Stack", &objectCreateProps.type, ObjectType::STACK);
+        ImGui::RadioButton("Stack", &objectCreateProps.type, ObjectType::STACK); ; ImGui::SameLine();
+        ImGui::RadioButton("Ragdoll", &objectCreateProps.type, ObjectType::RAG_DOLL);
 
         if(objectCreateProps.type == BOX){
             ImGui::DragFloat3("Size", reinterpret_cast<float*>(&objectCreateProps.size), 0.2f, 0.1f, 5.0f);
@@ -859,6 +864,11 @@ void GameWorld::renderObjectCreateMenu(VkCommandBuffer commandBuffer) {
             ImGui::RadioButton("Sphere", &objectCreateProps.stack.type, ObjectType::SPHERE); ImGui::SameLine();
             ImGui::RadioButton("Diamond", &objectCreateProps.stack.type, ObjectType::DIAMOND);
         }
+
+        if(objectCreateProps.type == RAG_DOLL){
+            objectCreateProps.speed = 0;
+            objectCreateProps.rotation = 0;
+        }
     }
     ImGui::End();
 }
@@ -871,44 +881,46 @@ void GameWorld::debugMenu(VkCommandBuffer commandBuffer) {
 }
 
 void GameWorld::createSceneObjects() {
+//
+//
+//    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
+//
+//    auto door = g_halfBoxUnit;
+//    for(auto& p : door){
+//        p *= glm::vec3(5, 10, 0.2);
+//    }
+//
+//    auto entityA =
+//        cubeBuilder
+//            .position(0, 5, 0)
+//            .mass(10)
+//            .elasticity(0.8)
+//            .friction(1.0)
+//            .shape(std::make_shared<BoxShape>(door))
+//        .build();
+//
+//    auto entityB =
+//        cubeBuilder
+//            .position(2.6, 5, 2.6)
+//            .orientation(glm::angleAxis(-glm::half_pi<float>(), glm::vec3{0, 1, 0}))
+//        .build();
+//
+//    auto& bodyA = entityA.get<Body>();
+//    auto hinge = std::make_unique<ConstraintHingeQuatLimited>();
+//    auto anchor = bodyA.position;
+//    anchor.x += 2.6;
+//    hinge->m_bodyA = &bodyA;
+//    hinge->m_anchorA = bodyA.worldSpaceToBodySpace(anchor);
+//
+//    auto& bodyB = entityB.get<Body>();
+//    hinge->m_bodyB = &bodyB;
+//    hinge->m_anchorB = bodyB.worldSpaceToBodySpace(anchor);
+//
+//    hinge->m_axisA = {0, 1, 0};
+//    hinge->m_q0 = glm::inverse(bodyA.orientation) * bodyB.orientation;
+//    m_constraints.push_back(std::move(hinge));
 
-
-    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
-
-    auto door = g_halfBoxUnit;
-    for(auto& p : door){
-        p *= glm::vec3(5, 10, 0.2);
-    }
-
-    auto entityA =
-        cubeBuilder
-            .position(0, 5, 0)
-            .mass(10)
-            .elasticity(0.8)
-            .friction(1.0)
-            .shape(std::make_shared<BoxShape>(door))
-        .build();
-
-    auto entityB =
-        cubeBuilder
-            .position(2.6, 5, 2.6)
-            .orientation(glm::angleAxis(-glm::half_pi<float>(), glm::vec3{0, 1, 0}))
-        .build();
-
-    auto& bodyA = entityA.get<Body>();
-    auto hinge = std::make_unique<ConstraintHingeQuatLimited>();
-    auto anchor = bodyA.position;
-    anchor.x += 2.6;
-    hinge->m_bodyA = &bodyA;
-    hinge->m_anchorA = bodyA.worldSpaceToBodySpace(anchor);
-
-    auto& bodyB = entityB.get<Body>();
-    hinge->m_bodyB = &bodyB;
-    hinge->m_anchorB = bodyB.worldSpaceToBodySpace(anchor);
-
-    hinge->m_axisA = {0, 1, 0};
-    hinge->m_q0 = glm::inverse(bodyA.orientation) * bodyB.orientation;
-    m_constraints.push_back(std::move(hinge));
+    Ragdoll::build(cubeEntity, registry, m_constraints);
 
     sandBoxEntity =  SandBox().build(ObjectBuilder(cubeEntity, &registry), registry);
 
