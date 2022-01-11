@@ -1,6 +1,6 @@
-#include "constrainthingequatlimited.hpp"
+#include "constraintconstantvelocity.hpp"
 
-void ConstraintHingeQuatLimited::preSolve(float dt) {
+void ConstraintConstantVelocity::preSolve(float dt) {
     const auto worldAnchorA = m_bodyA->bodySpaceToWorldSpace(m_anchorA);
     const auto worldAnchorB = m_bodyB->bodySpaceToWorldSpace(m_anchorB);
 
@@ -16,9 +16,8 @@ void ConstraintHingeQuatLimited::preSolve(float dt) {
     const auto q1_inv = glm::inverse(q1);
 
     glm::vec3 u, v;
-    auto hingeAxis = m_axisA;
-    orthonormal(hingeAxis, u, v);
-
+    auto cv = m_axisA;
+    orthonormal(cv, u, v);
 
     glm::mat4 P{
             {0, 0, 0, 0},
@@ -30,15 +29,6 @@ void ConstraintHingeQuatLimited::preSolve(float dt) {
 
     const auto MatA = P * qLeft(q1_inv) * qRight(q2 * q0_inv) * P_T * -0.5f;
     const auto MatB = P * qLeft(q1_inv) * qRight(q2 * q0_inv) * P_T * 0.5f;
-
-    const auto qr = q1_inv * q2;
-    const auto qrr = qr * q0_inv;
-    auto relativeAngle = 2.0f * glm::asin(glm::dot(glm::axis(qrr), hingeAxis));
-    relativeAngle = glm::degrees(relativeAngle);
-
-    m_isAngleViolated = relativeAngle > 45 || relativeAngle < -45;
-    m_relativeAngle = relativeAngle;
-
 
     // The distance constraint
     m_Jacobian.clear();
@@ -63,46 +53,16 @@ void ConstraintHingeQuatLimited::preSolve(float dt) {
         J1 = glm::vec3(0);
         m_Jacobian.set(1, 0, J1);
 
-        tmp = MatA * glm::vec4(0, u.x, u.y, u.z);
+        tmp = MatA * glm::vec4(0, cv.x, cv.y, cv.z) * -0.5f;
         J2 = { tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
         m_Jacobian.set(1, 3, J2);
 
         J3 = glm::vec3(0);
         m_Jacobian.set(1, 6, J3);
 
-        tmp = MatB * glm::vec4(0, u.x, u.y, u.z);
+        tmp = MatB * glm::vec4(0, cv.x, cv.y, cv.z) * -0.5f;
         J4 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
         m_Jacobian.set(1, 9, J4);
-    }
-    {
-        J1 = glm::vec3(0);
-        m_Jacobian.set(2, 0, J1);
-
-        tmp = MatA * glm::vec4(0, v.x, v.y, v.z);
-        J2 = { tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
-        m_Jacobian.set(2, 3, J2);
-
-        J3 = glm::vec3(0);
-        m_Jacobian.set(2, 6, J3);
-
-        tmp = MatB * glm::vec4(0, v.x, v.y, v.z);
-        J4 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
-        m_Jacobian.set(2, 9, J4);
-    }
-    if(m_isAngleViolated){
-        J1 = glm::vec3(0);
-        m_Jacobian.set(3, 0, J1);
-
-        tmp = MatA * glm::vec4(0, hingeAxis);
-        J2 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
-        m_Jacobian.set(3, 3, J2);
-
-        J3 = glm::vec3(0);
-        m_Jacobian.set(3, 6, J3);
-
-        tmp = MatB * glm::vec4(0, hingeAxis);
-        J4 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
-        m_Jacobian.set(3, 9, J4);
     }
 
     const auto impulses = m_Jacobian.transpose() * m_cachedLambda;
@@ -113,9 +73,11 @@ void ConstraintHingeQuatLimited::preSolve(float dt) {
     C = glm::max(0.0f, C - 0.01f);
     const auto Beta = 0.05f;
     m_baumgarte = (Beta / dt) * C;
+
+
 }
 
-void ConstraintHingeQuatLimited::solve() {
+void ConstraintConstantVelocity::solve() {
     const auto jacobianTranspose = m_Jacobian.transpose();
 
     // Build the system of equations
@@ -127,25 +89,13 @@ void ConstraintHingeQuatLimited::solve() {
     rhs[0] -= m_baumgarte;
 
     // Solve for the Lagrange multipliers;
-    auto lambdaN = lcp::gaussSeidel(J_W_Jt, rhs);
-
-    // Clamp the torque from the angle constraint.
-    // We need to make sure it's a restorative torque.
-    if(m_isAngleViolated){
-        if(m_relativeAngle > 0.0f){
-            lambdaN[3] = glm::min(0.0f, lambdaN[3]);
-        }
-        if(m_relativeAngle < 0.0f){
-            lambdaN[3] = glm::max(0.0f, lambdaN[3]);
-        }
-    }
-
+    const auto lambdaN = lcp::gaussSeidel(J_W_Jt, rhs);
     const auto impulses = jacobianTranspose * lambdaN;
 
     applyImpulses(impulses);
 }
 
-void ConstraintHingeQuatLimited::postSolve() {
+void ConstraintConstantVelocity::postSolve() {
     if( m_cachedLambda[0] * 0.0f != m_cachedLambda[0] * 0.0f){
         m_cachedLambda[0] = 0.0f;
     }
