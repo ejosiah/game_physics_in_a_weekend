@@ -25,7 +25,10 @@ struct ObjectCreateProperties{
     float radius{1};
     float speed{200};
     float rotation{0};
-    int stackHeight{5};
+    struct {
+        int height{5};
+        int type{BOX};
+    } stack;
     bool create{false};
 };
 
@@ -52,7 +55,7 @@ protected:
 
     void createSceneObjects();
 
-    std::vector<Entity> createStack(const glm::vec3& position = glm::vec3(0), int height = 5);
+    std::vector<Entity> createStack(int type = ObjectType::BOX, const glm::vec3& position = glm::vec3(0), int height = 5);
 
     std::shared_ptr<ConvexHullShape> diamondShape(float size = 1.0f);
 

@@ -477,7 +477,7 @@ void GameWorld::createObject() {
         entity.get<Offset>().value = (unitBounds.min + unitBounds.max) * 0.5f * objectCreateProps.radius;
         entities.push_back(entity);
     } else if(objectCreateProps.type == ObjectType::STACK){
-        entities = createStack(objectCreateProps.position, objectCreateProps.stackHeight);
+        entities = createStack(objectCreateProps.stack.type, objectCreateProps.position, objectCreateProps.stack.height);
     }
 
     for(auto entity : entities) {
@@ -853,7 +853,11 @@ void GameWorld::renderObjectCreateMenu(VkCommandBuffer commandBuffer) {
         if(objectCreateProps.type == STACK){
             objectCreateProps.speed = 0;
             objectCreateProps.rotation = 0;
-            ImGui::SliderInt("Height", &objectCreateProps.stackHeight, 2, 10);
+            ImGui::SliderInt("Height", &objectCreateProps.stack.height, 2, 10);
+            ImGui::Text("Type:");
+            ImGui::RadioButton("Box", &objectCreateProps.stack.type, ObjectType::BOX); ImGui::SameLine();
+            ImGui::RadioButton("Sphere", &objectCreateProps.stack.type, ObjectType::SPHERE); ImGui::SameLine();
+            ImGui::RadioButton("Diamond", &objectCreateProps.stack.type, ObjectType::DIAMOND);
         }
     }
     ImGui::End();
@@ -868,6 +872,44 @@ void GameWorld::debugMenu(VkCommandBuffer commandBuffer) {
 
 void GameWorld::createSceneObjects() {
 
+
+    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
+
+    auto door = g_halfBoxUnit;
+    for(auto& p : door){
+        p *= glm::vec3(5, 10, 0.2);
+    }
+
+    auto entityA =
+        cubeBuilder
+            .position(0, 5, 0)
+            .mass(10)
+            .elasticity(0.8)
+            .friction(1.0)
+            .shape(std::make_shared<BoxShape>(door))
+        .build();
+
+    auto entityB =
+        cubeBuilder
+            .position(2.6, 5, 2.6)
+            .orientation(glm::angleAxis(-glm::half_pi<float>(), glm::vec3{0, 1, 0}))
+        .build();
+
+    auto& bodyA = entityA.get<Body>();
+    auto hinge = std::make_unique<ConstraintHingeQuat>();
+    auto anchor = bodyA.position;
+    anchor.x += 2.6;
+    hinge->m_bodyA = &bodyA;
+    hinge->m_anchorA = bodyA.worldSpaceToBodySpace(anchor);
+
+    auto& bodyB = entityB.get<Body>();
+    hinge->m_bodyB = &bodyB;
+    hinge->m_anchorB = bodyB.worldSpaceToBodySpace(anchor);
+
+    hinge->m_axisA = {0, 1, 0};
+    hinge->m_q0 = glm::inverse(bodyA.orientation) * bodyB.orientation;
+    m_constraints.push_back(std::move(hinge));
+
     sandBoxEntity =  SandBox().build(ObjectBuilder(cubeEntity, &registry), registry);
 
     auto view = registry.view<Body>();
@@ -879,7 +921,7 @@ void GameWorld::createSceneObjects() {
     simStates.numObjects = bodies.size();
 }
 
-std::vector<Entity> GameWorld::createStack(const glm::vec3& position, int height) {
+std::vector<Entity> GameWorld::createStack(int type, const glm::vec3& position, int height) {
     auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
 
     std::vector<Entity> entities;
@@ -1071,13 +1113,16 @@ void GameWorld::initBasis() {
 }
 
 void GameWorld::renderObjectBasis(VkCommandBuffer commandBuffer) {
-    auto view = registry.view<Body, component::Transform>();
+    auto view = registry.view<Body, Offset>();
 
     VkDeviceSize offset = 0;
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderBasis.pipeline);
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, renderBasis.vertices, &offset);
     for(auto entity : view){
-        auto model = view.get<component::Transform>(entity).value;
+        auto& body = view.get<Body>(entity);
+        auto offset = view.get<Offset>(entity).value;
+        auto translate = glm::translate(glm::mat4(1), body.position + offset);
+        auto model =  translate * glm::mat4(body.orientation) * glm::scale(glm::mat4(1), glm::vec3(2));
         cameraController->push(commandBuffer, renderBasis.layout, model);
         vkCmdDraw(commandBuffer, renderBasis.vertices.size/sizeof(Vertex), 1, 0, 0);
     }

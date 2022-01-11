@@ -19,6 +19,8 @@ public:
 
     ObjectBuilder& orientation(float w, float x, float y, float z);
 
+    ObjectBuilder& orientation(const glm::quat& q);
+
     ObjectBuilder& rotation(const glm::quat& qu);
 
     ObjectBuilder& mass(float ma);

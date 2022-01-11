@@ -129,6 +129,11 @@ ObjectBuilder &ObjectBuilder::orientation(const float w, const float x, const fl
     return *this;
 }
 
+ObjectBuilder &ObjectBuilder::orientation(const glm::quat& q) {
+    m_rotation = q;
+    return *this;
+}
+
 ObjectBuilder &ObjectBuilder::position(const float x, const float y, const float z) {
     m_position = glm::vec3(x, y, z);
 
