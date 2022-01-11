@@ -896,7 +896,7 @@ void GameWorld::createSceneObjects() {
         .build();
 
     auto& bodyA = entityA.get<Body>();
-    auto hinge = std::make_unique<ConstraintHingeQuat>();
+    auto hinge = std::make_unique<ConstraintHingeQuatLimited>();
     auto anchor = bodyA.position;
     anchor.x += 2.6;
     hinge->m_bodyA = &bodyA;

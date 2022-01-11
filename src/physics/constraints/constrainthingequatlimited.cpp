@@ -1,8 +1,6 @@
-#include "quatOps.hpp"
-#include "vectorops.hpp"
-#include "constraintorientation.hpp"
+#include "constrainthingequatlimited.hpp"
 
-void ConstraintHingeQuat::preSolve(const float dt) {
+void ConstraintHingeQuatLimited::preSolve(float dt) {
     const auto worldAnchorA = m_bodyA->bodySpaceToWorldSpace(m_anchorA);
     const auto worldAnchorB = m_bodyB->bodySpaceToWorldSpace(m_anchorB);
 
@@ -32,6 +30,16 @@ void ConstraintHingeQuat::preSolve(const float dt) {
 
     const auto MatA = P * qLeft(q1_inv) * qRight(q2 * q0_inv) * P_T * -0.5f;
     const auto MatB = P * qLeft(q1_inv) * qRight(q2 * q0_inv) * P_T * 0.5f;
+
+    constexpr auto PI = glm::pi<float>();
+    const auto qr = q1_inv * q2;
+    const auto qrr = qr * q0_inv;
+    auto relativeAngle = 2.0f * glm::asin(glm::dot(glm::axis(qrr), hingeAxis));
+    relativeAngle = glm::degrees(relativeAngle);
+
+    m_isAngleViolated = relativeAngle > 45 || relativeAngle < -45;
+    m_relativeAngle = relativeAngle;
+
 
     // The distance constraint
     m_Jacobian.clear();
@@ -82,6 +90,21 @@ void ConstraintHingeQuat::preSolve(const float dt) {
         J4 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
         m_Jacobian.set(2, 9, J4);
     }
+    if(m_isAngleViolated){
+        J1 = glm::vec3(0);
+        m_Jacobian.set(3, 0, J1);
+
+        tmp = MatA * glm::vec4(0, hingeAxis);
+        J2 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
+        m_Jacobian.set(3, 3, J2);
+
+        J3 = glm::vec3(0);
+        m_Jacobian.set(3, 6, J3);
+
+        tmp = MatB * glm::vec4(0, hingeAxis);
+        J4 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
+        m_Jacobian.set(3, 9, J4);
+    }
 
     const auto impulses = m_Jacobian.transpose() * m_cachedLambda;
     applyImpulses(impulses);
@@ -93,7 +116,7 @@ void ConstraintHingeQuat::preSolve(const float dt) {
     m_baumgarte = (Beta / dt) * C;
 }
 
-void ConstraintHingeQuat::solve() {
+void ConstraintHingeQuatLimited::solve() {
     const auto jacobianTranspose = m_Jacobian.transpose();
 
     // Build the system of equations
@@ -105,13 +128,25 @@ void ConstraintHingeQuat::solve() {
     rhs[0] -= m_baumgarte;
 
     // Solve for the Lagrange multipliers;
-    const auto lambdaN = lcp::gaussSeidel(J_W_Jt, rhs);
+    auto lambdaN = lcp::gaussSeidel(J_W_Jt, rhs);
+
+    // Clamp the torque from the angle constraint.
+    // We need to make sure it's a restorative torque.
+    if(m_isAngleViolated){
+        if(m_relativeAngle > 0.0f){
+            lambdaN[3] = glm::min(0.0f, lambdaN[3]);
+        }
+        if(m_relativeAngle < 0.0f){
+            lambdaN[3] = glm::max(0.0f, lambdaN[3]);
+        }
+    }
+
     const auto impulses = jacobianTranspose * lambdaN;
 
     applyImpulses(impulses);
 }
 
-void ConstraintHingeQuat::postSolve() {
+void ConstraintHingeQuatLimited::postSolve() {
     if( m_cachedLambda[0] * 0.0f != m_cachedLambda[0] * 0.0f){
         m_cachedLambda[0] = 0.0f;
     }

@@ -4,3 +4,4 @@
 #include "constraintdistance.hpp"
 #include "constraintPenetration.hpp"
 #include "constraintorientation.hpp"
+#include "constrainthingequatlimited.hpp"
