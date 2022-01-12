@@ -145,10 +145,12 @@ public:
         }
     }
 
+    [[nodiscard]]
     constexpr int numRows() const {
         return M;
     }
 
+    [[nodiscard]]
     constexpr int numColumns() const {
         return N;
     }

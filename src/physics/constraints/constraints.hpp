@@ -8,3 +8,4 @@
 #include "constraintconstantvelocity.hpp"
 #include "constraintconstantvelocitylimited.hpp"
 #include "constraintmotor.hpp"
+#include "constraintmover.hpp"

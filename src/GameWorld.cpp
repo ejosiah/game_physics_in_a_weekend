@@ -920,50 +920,29 @@ void GameWorld::createSceneObjects() {
 //    m_constraints.push_back(std::move(hinge));
 
 
-    glm::vec3 motorPos{5, 2, 0};
-    glm::vec3 motorAxis{0, 1, 0};
-    glm::quat motorOrient{0, -1, 0, 0};
-
     auto builder = ObjectBuilder(cubeEntity, &registry);
 
-    auto motorEntity =
+    auto platformEntity =
         builder
-            .position(motorPos)
-            .shape(std::make_shared<BoxShape>(g_boxSmall))
+            .position(10, 5, 0)
+            .shape(std::make_shared<BoxShape>(g_boxPlatform))
             .mass(0)
-            .elasticity(0.9)
+            .elasticity(0.1)
             .friction(0.5)
         .build();
 
-    auto beamEntity =
+    auto mover = std::make_unique<ConstraintMover>();
+    mover->m_bodyA = &platformEntity.get<Body>();
+    m_constraints.push_back(std::move(mover));
+
+    auto boxEntity =
         builder
-            .position(motorPos - motorAxis)
-            .orientation(motorOrient)
-            .shape(std::make_shared<BoxShape>(g_boxBeam))
-            .mass(100)
-            .elasticity(1.0)
-            .friction(0.5)
+            .position(10, 6.3, 0)
+            .shape(std::make_shared<BoxShape>(g_boxUnit))
+            .mass(1)
+            .elasticity(0.1)
+            .friction(0.9)
         .build();
-
-    auto joint = std::make_unique<ConstraintMotor>();
-    joint->m_bodyA = &motorEntity.get<Body>();
-    joint->m_bodyB = &beamEntity.get<Body>();
-
-    const auto anchor = joint->m_bodyA->position;
-    joint->m_anchorA = joint->m_bodyA->worldSpaceToBodySpace(anchor);
-    joint->m_anchorB = joint->m_bodyB->worldSpaceToBodySpace(anchor);
-    joint->m_motorSpeed = 2.0f;
-    joint->m_motorAxis = glm::rotate(glm::inverse(joint->m_bodyA->orientation), motorAxis);
-    joint->m_q0 = glm::inverse(joint->m_bodyA->orientation) * joint->m_bodyB->orientation;
-    m_constraints.push_back(std::move(joint));
-
-    ObjectBuilder(sphereEntity, &registry)
-        .position(motorPos + glm::vec3(2, 2, 0))
-        .shape(std::make_shared<SphereShape>(1))
-        .mass(1)
-        .elasticity(0.1)
-        .friction(0.9)
-    .build();
 
     sandBoxEntity = SandBox().build(ObjectBuilder(cubeEntity, &registry), registry);
 

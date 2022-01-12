@@ -51,3 +51,15 @@ std::vector<glm::vec3> g_boxBeam = {
         { l,-t, -t},
         { l,-t,  t}
 };
+
+std::vector<glm::vec3> g_boxPlatform = {
+        {-l, -t, -l},
+        {-l, -t,  l},
+        {-l,  t,  l},
+        {-l,  t, -l},
+
+        { l, t,  l},
+        { l, t, -l},
+        { l,-t, -l},
+        { l,-t,  l}
+};
