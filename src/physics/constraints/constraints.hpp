@@ -7,3 +7,4 @@
 #include "constrainthingequatlimited.hpp"
 #include "constraintconstantvelocity.hpp"
 #include "constraintconstantvelocitylimited.hpp"
+#include "constraintmotor.hpp"

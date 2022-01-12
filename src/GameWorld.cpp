@@ -881,14 +881,13 @@ void GameWorld::debugMenu(VkCommandBuffer commandBuffer) {
 }
 
 void GameWorld::createSceneObjects() {
-//
-//
-//    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
-//
-//    auto door = g_halfBoxUnit;
-//    for(auto& p : door){
-//        p *= glm::vec3(5, 10, 0.2);
-//    }
+
+    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
+
+    auto door = g_halfBoxUnit;
+    for(auto& p : door){
+        p *= glm::vec3(5, 10, 0.2);
+    }
 //
 //    auto entityA =
 //        cubeBuilder
@@ -920,9 +919,53 @@ void GameWorld::createSceneObjects() {
 //    hinge->m_q0 = glm::inverse(bodyA.orientation) * bodyB.orientation;
 //    m_constraints.push_back(std::move(hinge));
 
-    Ragdoll::build(cubeEntity, registry, m_constraints);
 
-    sandBoxEntity =  SandBox().build(ObjectBuilder(cubeEntity, &registry), registry);
+    glm::vec3 motorPos{5, 2, 0};
+    glm::vec3 motorAxis{0, 1, 0};
+    glm::quat motorOrient{0, -1, 0, 0};
+
+    auto builder = ObjectBuilder(cubeEntity, &registry);
+
+    auto motorEntity =
+        builder
+            .position(motorPos)
+            .shape(std::make_shared<BoxShape>(g_boxSmall))
+            .mass(0)
+            .elasticity(0.9)
+            .friction(0.5)
+        .build();
+
+    auto beamEntity =
+        builder
+            .position(motorPos - motorAxis)
+            .orientation(motorOrient)
+            .shape(std::make_shared<BoxShape>(g_boxBeam))
+            .mass(100)
+            .elasticity(1.0)
+            .friction(0.5)
+        .build();
+
+    auto joint = std::make_unique<ConstraintMotor>();
+    joint->m_bodyA = &motorEntity.get<Body>();
+    joint->m_bodyB = &beamEntity.get<Body>();
+
+    const auto anchor = joint->m_bodyA->position;
+    joint->m_anchorA = joint->m_bodyA->worldSpaceToBodySpace(anchor);
+    joint->m_anchorB = joint->m_bodyB->worldSpaceToBodySpace(anchor);
+    joint->m_motorSpeed = 2.0f;
+    joint->m_motorAxis = glm::rotate(glm::inverse(joint->m_bodyA->orientation), motorAxis);
+    joint->m_q0 = glm::inverse(joint->m_bodyA->orientation) * joint->m_bodyB->orientation;
+    m_constraints.push_back(std::move(joint));
+
+    ObjectBuilder(sphereEntity, &registry)
+        .position(motorPos + glm::vec3(2, 2, 0))
+        .shape(std::make_shared<SphereShape>(1))
+        .mass(1)
+        .elasticity(0.1)
+        .friction(0.9)
+    .build();
+
+    sandBoxEntity = SandBox().build(ObjectBuilder(cubeEntity, &registry), registry);
 
     auto view = registry.view<Body>();
     for(auto entity : view){

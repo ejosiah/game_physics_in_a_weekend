@@ -109,9 +109,9 @@ void ConstraintHingeQuatLimited::preSolve(float dt) {
     applyImpulses(impulses);
 
     // Calculate the baumgarte stabilization;
+    const auto Beta = 0.05f;
     auto C = glm::dot(r, r);
     C = glm::max(0.0f, C - 0.01f);
-    const auto Beta = 0.05f;
     m_baumgarte = (Beta / dt) * C;
 }
 

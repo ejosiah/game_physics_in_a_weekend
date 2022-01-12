@@ -139,6 +139,33 @@ struct vec{
         return result;
     }
 
+    template<glm::length_t L, glm::qualifier Q = glm::defaultp>
+    inline void set(int offset, const glm::vec<L, float, Q>& v) {
+        assert(offset + L <= N);
+        switch(L){
+            case 2:
+                data[offset] = v[0];
+                data[offset + 1] = v[1];
+                break;
+            case 3:
+                data[offset] = v[0];
+                data[offset + 1] = v[1];
+                data[offset + 2] = v[2];
+                break;
+            case 4:
+                data[offset] = v[0];
+                data[offset + 1] = v[1];
+                data[offset + 2] = v[2];
+                data[offset + 3] = v[3];
+                break;
+            default:
+                for(int i = 0; i < L; i++){
+                    data[offset + i] = v[i];
+                }
+                break;
+        }
+    }
+
     auto begin() -> decltype(data.begin()) {
         return data.begin();
     }

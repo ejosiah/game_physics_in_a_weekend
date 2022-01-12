@@ -1,6 +1,6 @@
-#include "constraintconstantvelocitylimited.hpp"
+#include "constraintmotor.hpp"
 
-void ConstraintConstantVelocityLimited::preSolve(float dt) {
+void ConstraintMotor::preSolve(float dt) {
     const auto worldAnchorA = m_bodyA->bodySpaceToWorldSpace(m_anchorA);
     const auto worldAnchorB = m_bodyB->bodySpaceToWorldSpace(m_anchorB);
 
@@ -15,9 +15,12 @@ void ConstraintConstantVelocityLimited::preSolve(float dt) {
     const auto q0_inv = glm::inverse(m_q0);
     const auto q1_inv = glm::inverse(q1);
 
-    glm::vec3 u, v;
-    auto cv = m_axisA;
-    orthonormal(cv, u, v);
+    auto motorAxis = glm::rotate(m_bodyA->orientation, m_motorAxis);
+    glm::vec3 motorU, motorV;
+    orthonormal(motorAxis, motorU, motorV);
+    const auto u = motorU;
+    const auto v = motorV;
+    const auto w = motorAxis;
 
     glm::mat4 P{
             {0, 0, 0, 0},
@@ -29,17 +32,6 @@ void ConstraintConstantVelocityLimited::preSolve(float dt) {
 
     const auto MatA = P * qLeft(q1_inv) * qRight(q2 * q0_inv) * P_T * -0.5f;
     const auto MatB = P * qLeft(q1_inv) * qRight(q2 * q0_inv) * P_T * 0.5f;
-
-    const auto qr = q1_inv * q2;
-    const auto qrr = qr * q0_inv;
-    m_angleU = 2.0f * glm::asin(glm::dot(glm::axis(qrr), u));
-    m_angleU = glm::degrees(m_angleU);
-    m_isAngleViolatedU = m_angleU < -45 || m_angleU > 45;
-
-    auto qrr_axis = glm::vec3(qrr.x, qrr.y, qrr.z);
-    m_angleV = 2.0f * glm::asin(glm::dot(qrr_axis, v));
-    m_angleV = glm::degrees(m_angleV);
-    m_isAngleViolatedV = m_angleV < -45 || m_angleV > 45;
 
     // The distance constraint
     m_Jacobian.clear();
@@ -64,108 +56,95 @@ void ConstraintConstantVelocityLimited::preSolve(float dt) {
         J1 = glm::vec3(0);
         m_Jacobian.set(1, 0, J1);
 
-        tmp = MatA * glm::vec4(0, cv.x, cv.y, cv.z) * -0.5f;
+        tmp = MatA * glm::vec4(0, u.x, u.y, u.z);
         J2 = { tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
         m_Jacobian.set(1, 3, J2);
 
         J3 = glm::vec3(0);
         m_Jacobian.set(1, 6, J3);
 
-        tmp = MatB * glm::vec4(0, cv.x, cv.y, cv.z) * 0.5f;
+        tmp = MatB * glm::vec4(0, u.x, u.y, u.z);
         J4 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
         m_Jacobian.set(1, 9, J4);
     }
-
-    if(m_isAngleViolatedU){
+    {
         J1 = glm::vec3(0);
         m_Jacobian.set(2, 0, J1);
 
-        tmp = MatA * glm::vec4(0, u.x, u.y, u.z) * -0.5f;
+        tmp = MatA * glm::vec4(0, v.x, v.y, v.z);
         J2 = { tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
         m_Jacobian.set(2, 3, J2);
 
         J3 = glm::vec3(0);
         m_Jacobian.set(2, 6, J3);
 
-        tmp = MatB * glm::vec4(0, u.x, u.y, u.z) * 0.5f;
+        tmp = MatB * glm::vec4(0, v.x, v.y, v.z);
         J4 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
         m_Jacobian.set(2, 9, J4);
     }
-
-    if(m_isAngleViolatedV){
+    {
         J1 = glm::vec3(0);
         m_Jacobian.set(3, 0, J1);
 
-        tmp = MatA * glm::vec4(0, v.x, v.y, v.z) * -0.5f;
+        tmp = MatA * glm::vec4(0, w.x, w.y, w.z);
         J2 = { tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
         m_Jacobian.set(3, 3, J2);
 
         J3 = glm::vec3(0);
         m_Jacobian.set(3, 6, J3);
 
-        tmp = MatB * glm::vec4(0, v.x, v.y, v.z) * 0.5f;
+        tmp = MatB * glm::vec4(0, w.x, w.y, w.z);
         J4 = {tmp[idx + 0], tmp[idx + 1], tmp[idx + 2]};
         m_Jacobian.set(3, 9, J4);
     }
 
-    const auto impulses = m_Jacobian.transpose() * m_cachedLambda;
-    applyImpulses(impulses);
-
     // Calculate the baumgarte stabilization;
-    auto C = glm::dot(r, r);
-    C = glm::max(0.0f, C - 0.01f);
     const auto Beta = 0.05f;
-    m_baumgarte = (Beta / dt) * C;}
+    auto C = glm::dot(r, r);
 
-void ConstraintConstantVelocityLimited::solve() {
+    const auto qr = glm::inverse(m_bodyA->orientation) * m_bodyB->orientation;
+    const auto qrA = qr * q0_inv;    // Relative orientation in BodyA's space
+    const auto qrAAxis = glm::vec3(qrA.x, qrA.y, qrA.z);
+
+    // Get the world space axis for the relative rotation
+    const auto axisA = glm::rotate(m_bodyA->orientation, qrAAxis);
+
+    m_baumgarte = glm::vec3(0);
+
+    const auto Beta_over_dt = Beta/dt;
+    m_baumgarte[0] = Beta_over_dt * C;
+    m_baumgarte[1] = glm::dot(motorU, axisA) * Beta_over_dt;
+    m_baumgarte[2] = glm::dot(motorV, axisA) * Beta_over_dt;
+
+}
+
+void ConstraintMotor::solve() {
+    const auto motorAxis = glm::rotate(m_bodyA->orientation, m_motorAxis);
+
+    vec12 w_dt(0);
+    w_dt[3] = motorAxis[0] * -m_motorSpeed;
+    w_dt[4] = motorAxis[1] * -m_motorSpeed;
+    w_dt[5] = motorAxis[2] * -m_motorSpeed;
+
+    w_dt[ 9] = motorAxis[0] * m_motorSpeed;
+    w_dt[10] = motorAxis[1] * m_motorSpeed;
+    w_dt[11] = motorAxis[2] * m_motorSpeed;
+
     const auto jacobianTranspose = m_Jacobian.transpose();
 
     // Build the system of equations
-    const auto q_dt = velocities();
+    const auto q_dt = velocities() - w_dt;
     const auto invMassMatrix = inverseMassMatrix();
     const auto J_W_Jt = m_Jacobian * invMassMatrix * jacobianTranspose;
 
     auto rhs = m_Jacobian * -q_dt;
-    rhs[0] -= m_baumgarte;
+    rhs[0] -= m_baumgarte[0];
+    rhs[1] -= m_baumgarte[1];
+    rhs[2] -= m_baumgarte[2];
 
     // Solve for the Lagrange multipliers;
-    auto lambdaN = lcp::gaussSeidel(J_W_Jt, rhs);
-
-    // Clamp the torque from the angle constraint.
-    // We need to make sure it's a restorative torque.
-    if(m_isAngleViolatedU){
-        if(m_angleU > 0.0f){
-            lambdaN[2] = glm::min(0.0f, lambdaN[2]);
-        }
-        if(m_angleU < 0.0f){
-            lambdaN[2] = glm::max(0.0f, lambdaN[2]);
-        }
-    }
-
-    if(m_isAngleViolatedV){
-        if(m_angleV > 0.0f){
-            lambdaN[3] = glm::min(0.0f, lambdaN[3]);
-        }
-        if(m_angleV < 0.0f){
-            lambdaN[3] = glm::max(0.0f, lambdaN[3]);
-        }
-    }
-
+    const auto lambdaN = lcp::gaussSeidel(J_W_Jt, rhs);
     const auto impulses = jacobianTranspose * lambdaN;
 
     applyImpulses(impulses);
-}
-
-void ConstraintConstantVelocityLimited::postSolve() {
-    if( m_cachedLambda[0] * 0.0f != m_cachedLambda[0] * 0.0f){
-        m_cachedLambda[0] = 0.0f;
-    }
-
-    static constexpr float limit = 1e5f;
-    if(m_cachedLambda[0] > limit){
-        m_cachedLambda[0] = limit;
-    }
-    if(m_cachedLambda[0] < -limit){
-        m_cachedLambda[0] = -limit;
-    }
 }

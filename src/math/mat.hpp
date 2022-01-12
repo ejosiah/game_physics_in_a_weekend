@@ -145,6 +145,14 @@ public:
         }
     }
 
+    constexpr int numRows() const {
+        return M;
+    }
+
+    constexpr int numColumns() const {
+        return N;
+    }
+
     std::array<vec<N>, M> rows{};
 };
 

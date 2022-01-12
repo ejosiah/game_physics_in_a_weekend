@@ -42,12 +42,12 @@ std::vector<glm::vec3> g_boxSmall = {
 
 std::vector<glm::vec3> g_boxBeam = {
         {-l, -t, -t},
-        { l, -t, -t},
         {-l, -t,  t},
-        { l, -t,  t},
+        {-l,  t,  t},
+        {-l,  t, -t},
 
-        {-l, t, -t},
+        { l, t,  t},
         { l, t, -t},
-        {-l, t,  t},
-        { l, t,  t}
+        { l,-t, -t},
+        { l,-t,  t}
 };
