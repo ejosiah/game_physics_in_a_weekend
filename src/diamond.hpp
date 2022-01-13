@@ -76,7 +76,7 @@ struct Diamond{
     };
     std::vector<uint32_t> indices;
 
-    Entity build(VulkanDevice& device, VkPipeline pipeline, VkPipelineLayout layout, Entity diamondEntity, entt::registry& registry){
+    Entity build(VulkanDevice& device, VulkanPipeline& pipeline, VulkanPipelineLayout layout, Entity diamondEntity, entt::registry& registry){
         auto hullShape = std::make_shared<ConvexHullShape>(points);
         auto hullVertices = hullShape->vertices();
         std::vector<Vertex> vertices;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vulkan_util/components.h>
 #include <vulkan/vulkan.h>
 #include <vulkan_util/VulkanBaseApp.h>
 #include <vulkan_util/SkyBox.hpp>
@@ -109,7 +110,7 @@ protected:
         auto instanceBuffer = reinterpret_cast<InstanceData*>(renderComp.vertexBuffers[1].map());
 
         auto i = renderComp.instanceCount - 1;
-        auto view = registry.view<Tag, component::Transform>(entt::exclude<Delete>);
+        auto view = m_registry.view<Tag, component::Transform>(entt::exclude<Delete>);
         for(auto e : view){
             auto& transform = view.get<component::Transform>(e);
             instanceBuffer[i].transform = transform.value;

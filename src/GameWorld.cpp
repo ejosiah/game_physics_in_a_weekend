@@ -174,7 +174,7 @@ VkCommandBuffer *GameWorld::buildCommandBuffers(uint32_t imageIndex, uint32_t &n
 
     vkCmdBeginRenderPass(commandBuffer, &rPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    renderEntities(commandBuffer);
+    renderEntities(commandBuffer, m_registry);
 
     if(m_showBasis) {
         renderObjectBasis(commandBuffer);
@@ -258,7 +258,7 @@ void GameWorld::createSkyBox() {
     renderComponent.indexCount = indexCount;
 
     auto& pipelines = entity.add<component::Pipelines>();
-    pipelines.add({ *skyBox.pipeline, *skyBox.layout, 0, {}, { skyBox.descriptorSet } });
+    pipelines.add({ *skyBox.pipeline, *skyBox.layout, 0, {}, { (uint64_t)skyBox.descriptorSet } });
 }
 
 void GameWorld::initCamera() {
@@ -433,7 +433,7 @@ void GameWorld::createObject() {
     std::vector<Entity> entities;
     if (objectCreateProps.type == ObjectType::SPHERE) {
         auto entity =
-                ObjectBuilder(sphereEntity, &registry)
+                ObjectBuilder(sphereEntity, &m_registry)
                         .shape(std::make_shared<SphereShape>(objectCreateProps.radius))
                         .position(objectCreateProps.position)
                         .mass(objectCreateProps.mass)
@@ -449,7 +449,7 @@ void GameWorld::createObject() {
             v *= objectCreateProps.size;
         }
         auto  entity =
-                ObjectBuilder(cubeEntity, &registry)
+                ObjectBuilder(cubeEntity, &m_registry)
                         .shape(std::make_shared<BoxShape>(box))
                         .position(objectCreateProps.position)
                         .mass(objectCreateProps.mass)
@@ -461,7 +461,7 @@ void GameWorld::createObject() {
         entities.push_back(entity);
     } else if (objectCreateProps.type == ObjectType::DIAMOND) {
         auto entity =
-                ObjectBuilder(diamondEntity, &registry)
+                ObjectBuilder(diamondEntity, &m_registry)
                         .shape(diamondShape(objectCreateProps.radius))
                         .position(objectCreateProps.position)
                         .mass(objectCreateProps.mass)
@@ -481,7 +481,7 @@ void GameWorld::createObject() {
     } else if(objectCreateProps.type == ObjectType::STACK){
         entities = createStack(objectCreateProps.stack.type, objectCreateProps.position, objectCreateProps.stack.height);
     }else if(objectCreateProps.type == ObjectType::RAG_DOLL){
-        entities = Ragdoll::build(cubeEntity, registry, m_constraints, objectCreateProps.position);
+        entities = Ragdoll::build(cubeEntity, m_registry, m_constraints, objectCreateProps.position);
     }
 
     for(auto entity : entities) {
@@ -577,7 +577,7 @@ void GameWorld::updateBodies(float dt) {
 }
 
 void GameWorld::updateTransforms() {
-    auto view = registry.view<const Body, const Offset, const component::Scale, component::Transform>(entt::exclude<Delete>);
+    auto view = m_registry.view<const Body, const Offset, const component::Scale, component::Transform>(entt::exclude<Delete>);
 
     for(auto entity : view){
         const auto& body = view.get<const Body>(entity);
@@ -882,7 +882,7 @@ void GameWorld::debugMenu(VkCommandBuffer commandBuffer) {
 
 void GameWorld::createSceneObjects() {
 
-    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
+    auto cubeBuilder = ObjectBuilder(cubeEntity, &m_registry);
 
     auto door = g_halfBoxUnit;
     for(auto& p : door){
@@ -920,7 +920,7 @@ void GameWorld::createSceneObjects() {
 //    m_constraints.push_back(std::move(hinge));
 
 
-    auto builder = ObjectBuilder(cubeEntity, &registry);
+    auto builder = ObjectBuilder(cubeEntity, &m_registry);
 
     auto platformEntity =
         builder
@@ -944,9 +944,9 @@ void GameWorld::createSceneObjects() {
             .friction(0.9)
         .build();
 
-    sandBoxEntity = SandBox().build(ObjectBuilder(cubeEntity, &registry), registry);
+    sandBoxEntity = SandBox().build(ObjectBuilder(cubeEntity, &m_registry), m_registry);
 
-    auto view = registry.view<Body>();
+    auto view = m_registry.view<Body>();
     for(auto entity : view){
         auto body = &view.get<Body>(entity);
         bodies.push_back(body);
@@ -956,7 +956,7 @@ void GameWorld::createSceneObjects() {
 }
 
 std::vector<Entity> GameWorld::createStack(int type, const glm::vec3& position, int height) {
-    auto cubeBuilder = ObjectBuilder(cubeEntity, &registry);
+    auto cubeBuilder = ObjectBuilder(cubeEntity, &m_registry);
 
     std::vector<Entity> entities;
 
@@ -1050,7 +1050,7 @@ void GameWorld::newFrame() {
 // FIXME external references to become invalidated when entities within the ECS are deleted
 //    auto elapsedTimeMs = static_cast<uint64_t>(elapsedTime * 1000);
 //    if(elapsedTimeMs % 1000 == 0 && currentFrame % MAX_IN_FLIGHT_FRAMES == 0){
-//        auto view = registry.view<Body, component::Parent>(entt::exclude<Delete>);
+//        auto view = m_registry.view<Body, component::Parent>(entt::exclude<Delete>);
 //        std::vector<entt::entity> removeList;
 //        std::vector<Body*> removeBodyList;
 //
@@ -1068,8 +1068,8 @@ void GameWorld::newFrame() {
 //                removeBodyList.push_back(&body);
 //                removeList.push_back(entity);
 //                auto parentEntity = view.get<component::Parent>(entity).entity;
-//                registry.get<component::Render>(parentEntity).instanceCount--;
-//                spdlog::info("instance Count : {}", registry.get<component::Render>(parentEntity).instanceCount);
+//                m_registry.get<component::Render>(parentEntity).instanceCount--;
+//                spdlog::info("instance Count : {}", m_registry.get<component::Render>(parentEntity).instanceCount);
 //            }
 //        }
 //
@@ -1084,8 +1084,8 @@ void GameWorld::newFrame() {
 //        }
 //
 //        for(auto entity : removeList){
-//            registry.emplace<Delete>(entity);
-//            registry.destroy(entity);
+//            m_registry.emplace<Delete>(entity);
+//            m_registry.destroy(entity);
 //        }
 //    }
 //
@@ -1147,7 +1147,7 @@ void GameWorld::initBasis() {
 }
 
 void GameWorld::renderObjectBasis(VkCommandBuffer commandBuffer) {
-    auto view = registry.view<Body, Offset>();
+    auto view = m_registry.view<Body, Offset>();
 
     VkDeviceSize offset = 0;
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderBasis.pipeline);
@@ -1162,3 +1162,4 @@ void GameWorld::renderObjectBasis(VkCommandBuffer commandBuffer) {
     }
     cameraController->setModel(glm::mat4(1));
 }
+
