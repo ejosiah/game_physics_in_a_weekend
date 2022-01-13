@@ -1,6 +1,9 @@
 #version 460
 
+layout(set = 1, binding = 0) uniform sampler2D shadowMap;
+
 layout(location = 0) in struct {
+    vec4 lightSpacePos;
     vec4 position;
     vec3 normal;
     vec3 localNormal;
@@ -13,6 +16,35 @@ layout(location = 0) out vec4 fragColor;
 
 const vec3 lightDir = vec3(1);
 const vec3 globalAmbience = vec3(0.3);
+
+float shadowCalculation(vec4 lightSpacePos){
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
+    if(projCoords.z > 1.0){
+        return 0.0;
+    }
+    float closestDepth = texture(shadowMap, projCoords.xy).r;
+    float currentDepth = projCoords.z;
+    float shadow = currentDepth > closestDepth ? 1.0 : 0.0;
+    return shadow;
+}
+float pcfFilteredShadow(vec4 lightSpacePos){
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
+    if(projCoords.z > 1.0){
+        return 0.0;
+    }
+    float shadow = 0.0f;
+    float currentDepth = projCoords.z;
+    vec2 texelSize = 1.0/textureSize(shadowMap, 0);
+    for(int x = -1; x <= 1; x++){
+        for(int y = -1; y <= 1; y++){
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    return shadow/9.0;
+}
 
 vec3 GetColorFromPositionAndNormal( in vec3 worldPosition, in vec3 normal ) {
     const float pi = 3.141519;
@@ -56,9 +88,10 @@ void main(){
             albedo += GetColorFromPositionAndNormal( samplePos.xzy, v_in.localNormal.xzy) * dx * dy;
         }
     }
+    float shadow = pcfFilteredShadow(v_in.lightSpacePos);
     float diffuse = max(0, dot(N, L));
     float specular = max(0, pow(dot(N, H), 1000));
-    vec3 color = albedo * (globalAmbience + diffuse + specular);
+    vec3 color = albedo * (globalAmbience +  (1 - shadow) * diffuse);
 
     fragColor = vec4(color, 1);
 }

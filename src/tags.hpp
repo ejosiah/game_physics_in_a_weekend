@@ -16,6 +16,7 @@ struct SkyBoxTag{};
 struct SphereTag{};
 struct BoxTag{};
 struct SceneObjectTag{};
+struct Shadow{};
 struct Offset{
     glm::vec3 value{0};
 };

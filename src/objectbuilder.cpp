@@ -94,6 +94,7 @@ Entity ObjectBuilder::build() {
     }
 
     entity.add<component::Name>().value = m_name;
+    entity.add<Shadow>();
     entity.add<component::Position>().value = m_position;
     entity.add<component::Scale>().value = m_scale;
     entity.add<component::Rotation>().value = m_rotation;

@@ -7,13 +7,18 @@ layout(location = 3) in vec3 color;
 layout(location = 4) in mat4 local_transform;
 layout(location = 8) in vec3 scale;
 
-layout(push_constant) uniform MVP{
-    mat4 model;
+layout(set = 0, binding = 0) uniform SCENE_CONSTANTS{
     mat4 view;
     mat4 projection;
+    mat4 lightSpaceMatrix;
+};
+
+layout(push_constant) uniform MODLE_TRANSFORM{
+    mat4 model;
 };
 
 layout(location = 0) out struct{
+    vec4 lightSpacePos;
     vec4 position;
     vec3 normal;
     vec3 localNormal;
@@ -33,6 +38,7 @@ void main(){
     v_out.normal = worldNormal;
     v_out.color = color;
     v_out.eyes = (view * vec4(0, 0, 0, 1)).xyz;
+    v_out.lightSpacePos = lightSpaceMatrix * worldPosition;
     v_out.uv = uv;
     gl_Position = projection * view * worldPosition;
 }

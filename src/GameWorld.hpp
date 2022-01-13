@@ -10,6 +10,7 @@
 #include "objectbuilder.hpp"
 #include "constraints.hpp"
 #include "manifold.hpp"
+#include "shadowmap.hpp"
 
 enum ObjectType{
     SPHERE, BOX, DIAMOND, STACK, RAG_DOLL
@@ -41,6 +42,18 @@ protected:
     void initApp() override;
 
     void initBasis();
+
+    void createDescriptorSetLayouts();
+
+    void createUboBuffer();
+
+    void updateDescriptorSets();
+
+    void updateShadowMapDescriptorSet();
+
+    void updateUboDescriptorSet();
+
+    void initShadowMap();
 
     void initCamera();
 
@@ -83,6 +96,8 @@ protected:
     void onSwapChainRecreation() override;
 
     VkCommandBuffer *buildCommandBuffers(uint32_t imageIndex, uint32_t &numCommandBuffers) override;
+
+    void castShadow(VkCommandBuffer commandBuffer);
 
     void update(float time) override;
 
@@ -127,6 +142,14 @@ protected:
 
     void createSkyBox();
 
+    void updateUbo();
+
+    void renderEntitiesLocal(VkCommandBuffer commandBuffer, entt::registry& registry);
+
+    void renderSkyBox(VkCommandBuffer commandBuffer);
+
+    void renderSceneObjects(VkCommandBuffer commandBuffer);
+
     template<typename Func, typename durationType = chrono::milliseconds>
     std::chrono::milliseconds profile(Func&& func){
         auto startTime = std::chrono::high_resolution_clock::now();
@@ -136,10 +159,16 @@ protected:
         return std::chrono::duration_cast<durationType>(duration);
     }
 
+    void initFrustum();
+
+    void renderFrustum(VkCommandBuffer commandBuffer);
+
 protected:
     struct {
         VulkanPipelineLayout layout;
         VulkanPipeline pipeline;
+        VulkanDescriptorSetLayout uboDescriptorSetLayout;
+        VkDescriptorSet uboDescriptorSet;
     } render;
 
     struct {
@@ -184,4 +213,21 @@ protected:
     std::vector<std::unique_ptr<ConstraintBase>> m_constraints;
     ManifoldCollector m_manifolds;
     bool m_showBasis{false};
+    ShadowMap shadowMap;
+    Bounds scene{};
+
+    struct {
+        glm::mat4 view;
+        glm::mat4 projection;
+        glm::mat4 lightSpaceMatrix;
+    } ubo;
+
+    VulkanBuffer uboBuffer;
+
+    struct {
+        VulkanBuffer vertices;
+        VulkanBuffer indices;
+        VulkanPipelineLayout layout;
+        VulkanPipeline pipeline;
+    } frustum;
 };

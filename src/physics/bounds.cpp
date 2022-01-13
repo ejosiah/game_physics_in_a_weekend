@@ -6,7 +6,7 @@ Bounds::Bounds() {
 
 void Bounds::clear() {
     min = glm::vec3(std::numeric_limits<float>::max());
-    max = glm::vec3(std::numeric_limits<float>::min());
+    max = glm::vec3(std::numeric_limits<float>::lowest());
 }
 
 bool Bounds::intersect(const Bounds &rhs) const {

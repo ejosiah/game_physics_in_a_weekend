@@ -22,8 +22,12 @@ GameWorld::GameWorld(const Settings& settings) : VulkanBaseApp("Game Physics In 
 }
 
 void GameWorld::initApp() {
+    scene.expand(glm::vec3(80));
+    scene.expand(glm::vec3(-20));
     SkyBox::init(this);
     createDescriptorPool();
+    createDescriptorSetLayouts();
+    initShadowMap();
     createCommandPool();
     initCamera();
     createSkyBox();
@@ -31,13 +35,14 @@ void GameWorld::initApp() {
     createPipelineCache();
     createRenderPipeline();
     createRenderBasisPipeline();
+    createUboBuffer();
+    updateDescriptorSets();
     createComputePipeline();
     createSphereEntity();
     createCubeEntity();
     createDiamondEntity();
-
     createSceneObjects();
-
+    initFrustum();
 }
 
 void GameWorld::createDescriptorPool() {
@@ -121,7 +126,9 @@ void GameWorld::createRenderPipeline() {
                     .attachment()
                     .add()
                 .layout()
-                    .addPushConstantRange(Camera::pushConstant())
+                    .addPushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4))
+                    .addDescriptorSetLayout(render.uboDescriptorSetLayout)
+                    .addDescriptorSetLayout(shadowMap.shadowMapDescriptorSetLayout)
                 .renderPass(renderPass)
                 .subpass(0)
                 .name("render")
@@ -160,6 +167,8 @@ VkCommandBuffer *GameWorld::buildCommandBuffers(uint32_t imageIndex, uint32_t &n
     VkCommandBufferBeginInfo beginInfo = initializers::commandBufferBeginInfo();
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
+    castShadow(commandBuffer);
+
     static std::array<VkClearValue, 2> clearValues;
     clearValues[0].color = {0, 0, 1, 1};
     clearValues[1].depthStencil = {1.0, 0u};
@@ -174,11 +183,13 @@ VkCommandBuffer *GameWorld::buildCommandBuffers(uint32_t imageIndex, uint32_t &n
 
     vkCmdBeginRenderPass(commandBuffer, &rPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    renderEntities(commandBuffer, m_registry);
+    renderSceneObjects(commandBuffer);
+    renderSkyBox(commandBuffer);
 
     if(m_showBasis) {
         renderObjectBasis(commandBuffer);
     }
+
     renderUI(commandBuffer);
 
     vkCmdEndRenderPass(commandBuffer);
@@ -186,6 +197,56 @@ VkCommandBuffer *GameWorld::buildCommandBuffers(uint32_t imageIndex, uint32_t &n
     vkEndCommandBuffer(commandBuffer);
 
     return &commandBuffer;
+}
+
+void GameWorld::castShadow(VkCommandBuffer commandBuffer) {
+
+
+    static std::array<VkClearValue, 1> clearValues;
+    clearValues[0].depthStencil = {1.0, 0u};
+
+    VkRenderPassBeginInfo rPassInfo = initializers::renderPassBeginInfo();
+    rPassInfo.clearValueCount = COUNT(clearValues);
+    rPassInfo.pClearValues = clearValues.data();
+    rPassInfo.framebuffer = shadowMap.framebuffer;
+    rPassInfo.renderArea.offset = {0u, 0u};
+    rPassInfo.renderArea.extent = {shadowMap.size, shadowMap.size };
+    rPassInfo.renderPass = shadowMap.renderPass;
+
+    vkCmdBeginRenderPass(commandBuffer, &rPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    auto view = m_registry.view<component::Render, component::Transform>(entt::exclude<SkyBoxTag>);
+    static std::vector<VkBuffer> buffers;
+    for(auto entity : view){
+        auto model = view.get<component::Transform>(entity).value;
+        auto& renderComp = view.get<component::Render>(entity);
+
+        buffers.clear();
+        for(auto& buffer : renderComp.vertexBuffers){
+            buffers.push_back(buffer.buffer);
+        }
+        std::vector<VkDeviceSize> offsets(renderComp.vertexBuffers.size(), 0);
+        vkCmdBindVertexBuffers(commandBuffer, 0, COUNT(buffers), buffers.data(), offsets.data());
+        if (renderComp.indexCount > 0) {
+            vkCmdBindIndexBuffer(commandBuffer, renderComp.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        }
+
+        shadowMap.lightSpaceMatrix = shadowMap.lightProjection * shadowMap.lightView;
+        auto modelTransform = shadowMap.lightSpaceMatrix * model;
+
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shadowMap.pipeline);
+        vkCmdPushConstants(commandBuffer, shadowMap.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &modelTransform);
+        for (auto primitive : renderComp.primitives) {
+            if (renderComp.indexCount > 0) {
+                primitive.drawIndexed(commandBuffer, 0, renderComp.instanceCount);
+            } else {
+                primitive.draw(commandBuffer, 0, renderComp.instanceCount);
+            }
+        }
+    }
+
+
+    vkCmdEndRenderPass(commandBuffer);
 }
 
 void GameWorld::update(float time) {
@@ -201,7 +262,8 @@ void GameWorld::update(float time) {
     if(moveCamera) {
         cameraController->update(time);
     }
-
+    updateUbo();
+    uboBuffer.copy(&ubo, sizeof(ubo));
 }
 
 void GameWorld::fixedUpdate(float dt) {
@@ -888,6 +950,7 @@ void GameWorld::createSceneObjects() {
     for(auto& p : door){
         p *= glm::vec3(5, 10, 0.2);
     }
+    scene.clear();
 //
 //    auto entityA =
 //        cubeBuilder
@@ -949,10 +1012,12 @@ void GameWorld::createSceneObjects() {
     auto view = m_registry.view<Body>();
     for(auto entity : view){
         auto body = &view.get<Body>(entity);
+        scene.expand(body->shape->bounds());
         bodies.push_back(body);
     }
-
+    shadowMap.updateMatrix(scene, glm::vec3(1));
     simStates.numObjects = bodies.size();
+    spdlog::info("scene[min: {}, max: {}]", scene.min, scene.max);
 }
 
 std::vector<Entity> GameWorld::createStack(int type, const glm::vec3& position, int height) {
@@ -1163,3 +1228,251 @@ void GameWorld::renderObjectBasis(VkCommandBuffer commandBuffer) {
     cameraController->setModel(glm::mat4(1));
 }
 
+void GameWorld::createDescriptorSetLayouts() {
+    render.uboDescriptorSetLayout =
+        device.descriptorSetLayoutBuilder()
+            .binding(0)
+            .descriptorType(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+            .descriptorCount(1)
+            .shaderStages(VK_SHADER_STAGE_VERTEX_BIT)
+        .createLayout();
+
+    shadowMap.shadowMapDescriptorSetLayout =
+        device.descriptorSetLayoutBuilder()
+            .binding(0)
+            .descriptorCount(1)
+            .descriptorType(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+            .shaderStages(VK_SHADER_STAGE_FRAGMENT_BIT)
+        .createLayout();
+}
+
+void GameWorld::updateDescriptorSets() {
+    updateUboDescriptorSet();
+    updateShadowMapDescriptorSet();
+}
+
+void GameWorld::updateShadowMapDescriptorSet() {
+    shadowMap.shadowMapDescriptorSet = descriptorPool.allocate({shadowMap.shadowMapDescriptorSetLayout}).front();
+    device.setName<VK_OBJECT_TYPE_DESCRIPTOR_SET>("shadow_map", shadowMap.shadowMapDescriptorSet);
+    auto writes = initializers::writeDescriptorSets<1>();
+
+    VkDescriptorImageInfo imageInfo{ shadowMap.sampler, shadowMap.framebufferAttachment.imageView, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL };
+    writes[0].dstSet = shadowMap.shadowMapDescriptorSet;
+    writes[0].dstBinding = 0;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[0].descriptorCount = 1;
+    writes[0].pImageInfo = &imageInfo;
+
+    device.updateDescriptorSets(writes);
+}
+
+void GameWorld::updateUboDescriptorSet(){
+    render.uboDescriptorSet = descriptorPool.allocate({ render.uboDescriptorSetLayout }).front();
+
+    auto writes = initializers::writeDescriptorSets<1>();
+    writes[0].dstSet = render.uboDescriptorSet;
+    writes[0].dstBinding = 0;
+    writes[0].descriptorCount = 1;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+    VkDescriptorBufferInfo bufferInfo{ uboBuffer, 0, VK_WHOLE_SIZE};
+    writes[0].pBufferInfo = &bufferInfo;
+
+    device.updateDescriptorSets(writes);
+}
+
+void GameWorld::createUboBuffer() {
+    updateUbo();
+    uboBuffer = device.createCpuVisibleBuffer(&ubo, sizeof(ubo), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+}
+
+void GameWorld::updateUbo() {
+    auto& camera = cameraController->cam();
+    ubo.view = camera.view;
+    ubo.projection = camera.proj;
+    ubo.lightSpaceMatrix = shadowMap.lightSpaceMatrix;
+}
+
+void GameWorld::initShadowMap(){
+    ShadowMap::initShadowMap(device, fileManager, shadowMap, scene);
+}
+
+void GameWorld::renderEntitiesLocal(VkCommandBuffer commandBuffer, entt::registry &registry) {
+    auto camView = registry.view<const component::Camera>();
+
+    Camera* camera{nullptr};
+    for(auto entity : camView){
+        auto cam = camView.get<const component::Camera>(entity);
+        if(cam.main){
+            camera = cam.camera;
+            break;
+        }
+    }
+    if(!camera){
+        spdlog::error("no camera entity set");
+    }
+    assert(camera);
+
+    auto view = registry.view<component::Render, component::Transform,  component::Pipelines>();
+    static std::vector<VkBuffer> buffers;
+    for(auto entity : view){
+//    view.each([&](const component::Render& renderComp, const auto& transform,  const auto& pipelines)
+        auto& renderComp = view.get<component::Render>(entity);
+        auto& transform = view.get<component::Transform>(entity);
+        auto& pipelines = view.get<component::Pipelines>(entity);
+        if(renderComp.instanceCount > 0) {
+            auto model = transform.value;
+            camera->model = model;
+            std::vector<VkDeviceSize> offsets(renderComp.vertexBuffers.size(), 0);
+            buffers.clear();
+            for(auto& buffer : renderComp.vertexBuffers){
+                buffers.push_back(buffer.buffer);
+            }
+            vkCmdBindVertexBuffers(commandBuffer, 0, COUNT(buffers), buffers.data(), offsets.data());
+            if (renderComp.indexCount > 0) {
+                vkCmdBindIndexBuffer(commandBuffer, renderComp.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+            }
+            for (const auto &pipeline : pipelines) {
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,  (VkPipeline)pipeline.pipeline);
+                vkCmdPushConstants(commandBuffer, (VkPipelineLayout)pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Camera), camera);
+                if (!pipeline.descriptorSets.empty()) {
+                    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipelineLayout)pipeline.layout, 0,
+                                            COUNT(pipeline.descriptorSets), (VkDescriptorSet*)pipeline.descriptorSets.data(), 0,
+                                            VK_NULL_HANDLE);
+                }
+                for (auto primitive : renderComp.primitives) {
+                    if (renderComp.indexCount > 0) {
+                        primitive.drawIndexed(commandBuffer, 0, renderComp.instanceCount);
+                    } else {
+                        primitive.draw(commandBuffer, 0, renderComp.instanceCount);
+                    }
+                }
+            }
+        }
+    }
+//    );
+}
+
+void GameWorld::renderSceneObjects(VkCommandBuffer commandBuffer) {
+
+    static std::array<VkDescriptorSet, 2> sets;
+    sets[0] = render.uboDescriptorSet;
+    sets[1] = shadowMap.shadowMapDescriptorSet;
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, render.pipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, render.layout, 0, COUNT(sets), sets.data(), 0, nullptr);
+
+    auto view = m_registry.view<component::Render, component::Transform>(entt::exclude<SkyBoxTag>);
+    static std::vector<VkBuffer> buffers;
+    for(auto entity : view) {
+        auto& renderComp = view.get<component::Render>(entity);
+
+        if(renderComp.instanceCount > 0) {
+            auto& transform = view.get<component::Transform>(entity);
+            vkCmdPushConstants(commandBuffer, render.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform.value);
+            std::vector<VkDeviceSize> offsets(renderComp.vertexBuffers.size(), 0);
+            buffers.clear();
+            for(auto& buffer : renderComp.vertexBuffers){
+                buffers.push_back(buffer.buffer);
+            }
+            if (renderComp.indexCount > 0) {
+                vkCmdBindIndexBuffer(commandBuffer, renderComp.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+            }
+            vkCmdBindVertexBuffers(commandBuffer, 0, COUNT(buffers), buffers.data(), offsets.data());
+            for (auto primitive : renderComp.primitives) {
+                if (renderComp.indexCount > 0) {
+                    primitive.drawIndexed(commandBuffer, 0, renderComp.instanceCount);
+                } else {
+                    primitive.draw(commandBuffer, 0, renderComp.instanceCount);
+                }
+            }
+        }
+
+    }
+}
+
+void GameWorld::renderSkyBox(VkCommandBuffer commandBuffer) {
+    static glm::mat4 model{1};
+
+    uint32_t indexCount = skyBox.cube.indices.size /sizeof(int32_t);
+    uint32_t instanceCount = 1;
+    int32_t vertexOffset = 0;
+    uint32_t firstInstance = 0;
+    VkDeviceSize offset = 0;
+
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, skyBox.cube.vertices, &offset);
+    vkCmdBindIndexBuffer(commandBuffer, skyBox.cube.indices, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *skyBox.pipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *skyBox.layout, 0, 1, &skyBox.descriptorSet, 0, VK_NULL_HANDLE);
+    cameraController->push(commandBuffer, *skyBox.layout, model);
+    vkCmdDrawIndexed(commandBuffer, indexCount, instanceCount, firstInstance, vertexOffset, firstInstance);
+}
+
+void GameWorld::initFrustum() {
+    auto createFrustum = [&]{
+        auto vertices = Ndc::points;
+        auto worldSpaceMatrix = glm::inverse(shadowMap.lightProjection * shadowMap.lightView);
+        for(auto& vertex : vertices){
+            vertex = worldSpaceMatrix * vertex;
+        }
+        frustum.vertices = device.createDeviceLocalBuffer(vertices.data(), BYTE_SIZE(vertices), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
+        frustum.indices = device.createDeviceLocalBuffer(Ndc::indices.data(), BYTE_SIZE(Ndc::indices), VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
+    };
+
+    auto createFrustumPipeline = [&]{
+        frustum.pipeline =
+                device.graphicsPipelineBuilder()
+                        .shaderStage()
+                        .vertexShader(load("frustum.vert.spv"))
+                        .fragmentShader(load("frustum.frag.spv"))
+                        .vertexInputState()
+                        .addVertexBindingDescription(0, sizeof(glm::vec4), VK_VERTEX_INPUT_RATE_VERTEX)
+                        .addVertexAttributeDescription(0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 0)
+                        .inputAssemblyState()
+                        .lines()
+                        .viewportState()
+                        .viewport()
+                        .origin(0, 0)
+                        .dimension(swapChain.extent)
+                        .minDepth(0)
+                        .maxDepth(1)
+                        .scissor()
+                        .offset(0, 0)
+                        .extent(swapChain.extent)
+                        .add()
+                        .rasterizationState()
+                        .cullNone()
+                        .frontFaceCounterClockwise()
+                        .polygonModeFill()
+                        .lineWidth(3.0)
+                        .depthStencilState()
+                        .enableDepthWrite()
+                        .enableDepthTest()
+                        .compareOpLess()
+                        .minDepthBounds(0)
+                        .maxDepthBounds(1)
+                        .colorBlendState()
+                        .attachment()
+                        .add()
+                        .layout()
+                        .addPushConstantRange(Camera::pushConstant())
+                        .renderPass(renderPass)
+                        .subpass(0)
+                        .name("frustum")
+                        .pipelineCache(pipelineCache)
+                        .build(frustum.layout);
+
+    };
+
+    createFrustum();
+    createFrustumPipeline();
+}
+
+void GameWorld::renderFrustum(VkCommandBuffer commandBuffer) {
+    static VkDeviceSize offset = 0;
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, frustum.pipeline);
+    cameraController->push(commandBuffer, frustum.layout);
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, frustum.vertices, &offset);
+    vkCmdBindIndexBuffer(commandBuffer, frustum.indices, 0, VK_INDEX_TYPE_UINT32);
+    uint32_t indexCount = frustum.indices.size/sizeof(uint32_t);
+    vkCmdDrawIndexed(commandBuffer, indexCount, 1, 0, 0, 0);
+}
