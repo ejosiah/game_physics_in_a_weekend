@@ -14,6 +14,7 @@
 #include "Basis.hpp"
 #include "models.hpp"
 #include "ragdoll.hpp"
+#include <glm/gtc/noise.hpp>
 
 GameWorld::GameWorld(const Settings& settings) : VulkanBaseApp("Game Physics In One Weekend", settings) {
     fileManager.addSearchPath("spv");
@@ -250,15 +251,32 @@ void GameWorld::castShadow(VkCommandBuffer commandBuffer) {
 }
 
 void GameWorld::update(float time) {
-    static float dt = 1.0f/targetFrameRate;
+    static float dt = 1.0f/(targetFrameRate * MAX_IN_FLIGHT_FRAMES);
     static int dtMs = static_cast<int>(dt * 1000);
     auto elapsedTimeMs = static_cast<uint64_t>(elapsedTime * 1000);
 
-    bool runPhysics = m_runPhysics && (elapsedTimeMs % dtMs == 0) && (currentFrame % MAX_IN_FLIGHT_FRAMES == 0);
+//    bool runPhysics = m_runPhysics && (elapsedTimeMs % dtMs == 0) && (currentFrame == 0);
+    bool runPhysics = m_runPhysics && (elapsedTimeMs % dtMs == 0);
 
     if(runPhysics){
         fixedUpdate(dt);
     }
+
+    if(trauma > 0){
+        static int seed = 1 << 20;
+        static float freq = 200;
+        auto shake = trauma * trauma;
+        auto yaw = maxYaw * shake * glm::perlin(freq * glm::vec2{seed, elapsedTime});
+        auto pitch = maxPitch * shake * glm::perlin(freq * glm::vec2{seed + 1, elapsedTime});
+        auto roll = maxRoll * shake * glm::perlin(freq * glm::vec2{seed + 2, elapsedTime});
+        cameraController->rotate(yaw, pitch, roll);
+
+        auto t = glm::clamp(shakeTimeLeft/shakeDuration, 0.0f, 1.0f);
+
+        trauma = glm::mix(0.0f, trauma, t);
+        shakeTimeLeft -= dt;
+    }
+
     if(moveCamera) {
         cameraController->update(time);
     }
@@ -629,9 +647,11 @@ void GameWorld::updateBodies(float dt) {
             body->update(dt);
         }
 
-        resolveContact(contact);
+        trauma += resolveContact(contact);
+        shakeTimeLeft = shakeDuration;
         accumulatedTime += dt;
     }
+    trauma = glm::clamp(trauma, 0.0f, 1.0f);
 
     for(auto body : bodies){
         body->update(dt);
@@ -772,7 +792,7 @@ bool GameWorld::intersect(Body &bodyA, Body &bodyB, Contact& contact) {
     return false;
 }
 
-void GameWorld::resolveContact(Contact &contact) {
+float GameWorld::resolveContact(Contact &contact) {
     auto bodyA = contact.bodyA;
     auto bodyB = contact.bodyB;
 
@@ -840,6 +860,8 @@ void GameWorld::resolveContact(Contact &contact) {
         bodyA->position += ds * ta;
         bodyB->position -= ds * tb;
     }
+
+    return glm::abs(impulseJ)/maxImpulse;
 }
 
 void GameWorld::renderUI(VkCommandBuffer commandBuffer) {

@@ -111,7 +111,7 @@ protected:
 
     void updateBodies(float time);
 
-    void resolveContact(Contact& contact);
+    float resolveContact(Contact& contact);
 
     void updateTransforms();
 
@@ -197,7 +197,7 @@ protected:
     std::vector<Body*> bodies;
     std::vector<ObjectCreateProperties> objectsToCreate;
     Action* createSphereAction;
-    float targetFrameRate{120};
+    float targetFrameRate{240};
     int iterations{1};
     float timeScale{1};
     bool moveCamera{false};
@@ -230,4 +230,12 @@ protected:
         VulkanPipelineLayout layout;
         VulkanPipeline pipeline;
     } frustum;
+
+    float trauma{0};
+    float maxYaw{1};
+    float maxPitch{1};
+    float maxRoll{1};
+    float shakeDuration{5};
+    float shakeTimeLeft{0};
+    float maxImpulse{50};
 };
