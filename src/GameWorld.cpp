@@ -277,6 +277,7 @@ void GameWorld::update(float time) {
         shakeTimeLeft -= dt;
     }
 
+    bool moveCamera = !ImGui::IsAnyItemActive() || trauma > 0;
     if(moveCamera) {
         cameraController->update(time);
     }
@@ -306,7 +307,7 @@ void GameWorld::checkAppInputs() {
     if(createSphereAction->isPressed()){
         createObject();
     }
-    if(moveCamera) {
+    if(!ImGui::IsAnyItemActive()) {
         cameraController->processInput();
     }
 }
@@ -873,7 +874,6 @@ void GameWorld::renderUI(VkCommandBuffer commandBuffer) {
     {
         if(ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)){
             auto& cam = cameraController;
-            ImGui::Checkbox("Move Camera", &moveCamera);
             ImGui::Text("Position: %s", fmt::format("{}", cam->position()).c_str());
             ImGui::Text("Velocity: %s", fmt::format("{}", cam->velocity()).c_str());
             ImGui::Text("acceleration: %s", fmt::format("{}", cam->acceleration()).c_str());

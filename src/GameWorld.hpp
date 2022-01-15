@@ -200,7 +200,6 @@ protected:
     float targetFrameRate{240};
     int iterations{1};
     float timeScale{1};
-    bool moveCamera{false};
 
     struct {
         int numObjects{0};
