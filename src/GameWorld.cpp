@@ -20,6 +20,7 @@ GameWorld::GameWorld(const Settings& settings) : VulkanBaseApp("Game Physics In 
     fileManager.addSearchPath("spv");
     fileManager.addSearchPath("shaders");
     createSphereAction = &mapToMouse(static_cast<int>(MouseEvent::Button::RIGHT), "sphere", Action::detectInitialPressOnly());
+    fire = &mapToKey(Key::F, "fire", Action::detectInitialPressOnly());
 }
 
 void GameWorld::initApp() {
@@ -277,7 +278,7 @@ void GameWorld::update(float time) {
         shakeTimeLeft -= dt;
     }
 
-    bool moveCamera = !ImGui::IsAnyItemActive() || trauma > 0;
+    bool moveCamera = f || trauma > 0;
     if(moveCamera) {
         cameraController->update(time);
     }
@@ -305,6 +306,9 @@ void GameWorld::fixedUpdate(float dt) {
 
 void GameWorld::checkAppInputs() {
     if(createSphereAction->isPressed()){
+        createObject();
+    }
+    if(fire->isPressed() && m_runPhysics && objectCreateProps.speed > 0){
         createObject();
     }
     if(!ImGui::IsAnyItemActive()) {

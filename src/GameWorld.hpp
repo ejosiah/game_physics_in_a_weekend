@@ -197,6 +197,7 @@ protected:
     std::vector<Body*> bodies;
     std::vector<ObjectCreateProperties> objectsToCreate;
     Action* createSphereAction;
+    Action* fire;
     float targetFrameRate{240};
     int iterations{1};
     float timeScale{1};
