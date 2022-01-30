@@ -278,7 +278,7 @@ void GameWorld::update(float time) {
         shakeTimeLeft -= dt;
     }
 
-    bool moveCamera = f || trauma > 0;
+    bool moveCamera = !ImGui::IsAnyItemActive() || trauma > 0;
     if(moveCamera) {
         cameraController->update(time);
     }
